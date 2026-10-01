@@ -1,0 +1,16 @@
+id: nav_break_bps_max
+source: assetrecon
+description: Largest absolute difference between administrator NAV and internal NAV, in basis points.
+type: max
+expr: max(abs(diff_bps))
+from: nav_checks
+time_column: nav_date
+dimensions:
+  portfolio_id: portfolio_id
+  nav_date: nav_date
+filters:
+  portfolio_id: {expr: portfolio_id, type: str}
+  fund_group: {expr: fund_group, type: str}
+  nav_date: {expr: nav_date, type: date}
+unit: bps
+default_order: metric_desc

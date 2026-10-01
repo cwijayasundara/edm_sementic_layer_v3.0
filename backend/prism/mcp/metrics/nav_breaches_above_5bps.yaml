@@ -1,0 +1,18 @@
+id: nav_breaches_above_5bps
+source: assetrecon
+description: NAV checks where the administrator and internal NAV differ by more than 5 basis points.
+type: count
+expr: count(*)
+from: nav_checks
+base_filter: abs(diff_bps) > 5
+time_column: nav_date
+dimensions:
+  portfolio_id: portfolio_id
+  fund_group: fund_group
+  nav_date: nav_date
+filters:
+  portfolio_id: {expr: portfolio_id, type: str}
+  fund_group: {expr: fund_group, type: str}
+unit: checks
+default_order: metric_desc
+fine_grain_dimensions: [portfolio_id, nav_date]  # one nav check per portfolio per date: never both for metrics-only

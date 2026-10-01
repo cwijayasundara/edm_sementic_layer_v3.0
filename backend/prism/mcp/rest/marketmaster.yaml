@@ -1,0 +1,65 @@
+source: marketmaster
+endpoints:
+  - id: vendors
+    path: /api/v1/vendors
+    table: vendors
+    result_key: items
+    description: Price vendors and their default source ranking.
+    params: {}
+  - id: instruments
+    path: /api/v1/instruments
+    table: instruments
+    result_key: items
+    description: Priced instruments.
+    params: {asset_class: {type: str}, q: {type: str}, limit: {type: int, min: 1, max: 500}, offset: {type: int, min: 0}}
+  - id: timeseries
+    path: /api/v1/instruments/{security_id}/timeseries
+    table: golden_prices
+    result_key: points
+    description: Golden-price time series of one instrument.
+    params: {security_id: {type: str, location: path, required: true}, from: {type: date}, to: {type: date}}
+  - id: prices_conflicts
+    path: /api/v1/prices/conflicts
+    table: price_suspects
+    result_key: items
+    description: Vendor quotes that deviate from the golden price (conflicts).
+    params: {vendor_id: {type: str}, asset_class: {type: str}, status: {type: str}, from: {type: date}, to: {type: date}, limit: {type: int, min: 1, max: 500}, offset: {type: int, min: 0}}
+  - id: prices_conflicts_summary
+    path: /api/v1/prices/conflicts/summary
+    table: price_suspects
+    result_key: rows
+    description: Conflict counts grouped by vendor, asset class, date or status.
+    params: {group_by: {type: str_list, enum: [vendor_id, asset_class, price_date, status]}, from: {type: date}, to: {type: date}}
+  - id: prices_suspects
+    path: /api/v1/prices/suspects
+    table: price_suspects
+    result_key: items
+    description: Price suspects (stale, spike, missing, conflict).
+    params: {kind: {type: str}, vendor_id: {type: str}, asset_class: {type: str}, status: {type: str}, from: {type: date}, to: {type: date}, limit: {type: int, min: 1, max: 500}, offset: {type: int, min: 0}}
+  - id: golden_copy
+    path: /api/v1/golden-copy/{security_id}
+    table: golden_prices
+    result_key: null
+    description: Golden price of one instrument with the vendor quotes behind it.
+    params: {security_id: {type: str, location: path, required: true}, date: {type: date}}
+  - id: dq_metrics
+    path: /api/v1/dq/metrics
+    table: dq_stage_metrics
+    result_key: items
+    description: Data-quality funnel counts per pipeline stage.
+    params: {domain: {type: str}, stage: {type: str}, from: {type: date}, to: {type: date}, limit: {type: int, min: 1, max: 500}, offset: {type: int, min: 0}}
+  - id: esg
+    path: /api/v1/esg/{entity_id}
+    table: esg_scores
+    result_key: items
+    description: ESG scores of one entity.
+    params: {entity_id: {type: str, location: path, required: true}}
+metrics:
+  - id: price_conflicts
+    endpoint: prices_conflicts_summary
+    value_field: conflicts
+    description: Vendor price quotes deviating from the golden price (conflicts).
+    unit: conflicts
+    dimensions: {vendor_id: vendor_id, asset_class: asset_class, price_date: price_date, status: status}
+    filters: {}
+    fine_grain_dimensions: [vendor_id, price_date]  # one vendor quote per security per date: never both

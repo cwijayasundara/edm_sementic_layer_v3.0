@@ -1,0 +1,51 @@
+.env
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+node_modules/
+.next/
+.logs/
+.superpowers/
+.env.*
+!.env.example
+
+# Reference screenshots (contain client material) - keep local only
+docs/IMG_1129.JPG
+docs/IMG_1130.JPG
+docs/IMG_1131.JPG
+
+# Local embedding model cache (make models)
+.models/
+.cache/
+
+# Local tooling, temporary files and generated artifacts
+.git-rewrite/
+.ruff_cache/
+.mypy_cache/
+.tox/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+.DS_Store
+._*
+*.log
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+tmp/
+temp/
+build/
+dist/
+
+# Generated spike output (keep scripts and documentation)
+docs/superpowers/spikes/**/*_output.txt
+
+# Local credential files
+.envrc
+*.pem
+*.key

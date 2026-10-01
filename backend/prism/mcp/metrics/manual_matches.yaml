@@ -1,0 +1,17 @@
+id: manual_matches
+source: cashrecon
+description: Cash match groups that were matched manually (not by the engine).
+type: count
+expr: count(*)
+from: match_groups
+base_filter: status = 'manual'
+dimensions:
+  region: region
+  matched_by: matched_by
+  rule_id: rule_id
+filters:
+  region: {expr: region, type: str}
+  matched_by: {expr: matched_by, type: str}
+unit: match groups
+default_order: metric_desc
+sensitive_dimensions: [matched_by]  # individual operator identifiers

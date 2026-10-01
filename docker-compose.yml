@@ -1,0 +1,34 @@
+name: prism
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_PASSWORD: ${PRISM_PG_ADMIN_PASSWORD:-postgres}
+    ports:
+      - "127.0.0.1:${PRISM_PG_PORT:-5434}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  neo4j:
+    image: neo4j:5.26-community
+    ports:
+      - "127.0.0.1:${PRISM_NEO4J_HTTP_PORT:-7475}:7474"
+      - "127.0.0.1:${PRISM_NEO4J_BOLT_PORT:-7688}:7687"
+    environment:
+      NEO4J_AUTH: neo4j/${PRISM_NEO4J_PASSWORD:-prism-dev-neo4j}
+      NEO4J_server_memory_heap_initial__size: 512m
+      NEO4J_server_memory_heap_max__size: 1g
+    volumes:
+      - neo4j_data:/data
+    healthcheck:
+      test: ["CMD", "cypher-shell", "-u", "neo4j", "-p", "${PRISM_NEO4J_PASSWORD:-prism-dev-neo4j}", "RETURN 1"]
+      interval: 3s
+      timeout: 5s
+      retries: 30
+volumes:
+  pgdata:
+  neo4j_data:

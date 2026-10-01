@@ -1,0 +1,65 @@
+source: refmaster
+endpoints:
+  - id: securities
+    path: /api/v1/securities
+    table: securities
+    result_key: items
+    description: Security master (golden copy), filterable, paginated.
+    params: {asset_class: {type: str}, ccy: {type: str}, country: {type: str}, status: {type: str}, q: {type: str}, limit: {type: int, min: 1, max: 500}, offset: {type: int, min: 0}}
+  - id: security
+    path: /api/v1/securities/{security_id}
+    table: securities
+    result_key: null
+    description: One security by id.
+    params: {security_id: {type: str, location: path, required: true}}
+  - id: entities
+    path: /api/v1/entities
+    table: legal_entities
+    result_key: items
+    description: Legal entities (LEI master).
+    params: {country: {type: str}, sector: {type: str}, q: {type: str}, limit: {type: int, min: 1, max: 500}, offset: {type: int, min: 0}}
+  - id: accounts
+    path: /api/v1/accounts
+    table: accounts
+    result_key: items
+    description: Client accounts and their lifecycle state.
+    params: {region: {type: str}, lifecycle_state: {type: str}, product_id: {type: str}, limit: {type: int, min: 1, max: 500}, offset: {type: int, min: 0}}
+  - id: corporate_actions
+    path: /api/v1/corporate-actions
+    table: corporate_actions
+    result_key: items
+    description: Corporate action events by ex-date.
+    params: {security_id: {type: str}, event_type: {type: str}, status: {type: str}, from: {type: date}, to: {type: date}, limit: {type: int, min: 1, max: 500}, offset: {type: int, min: 0}}
+  - id: exceptions
+    path: /api/v1/exceptions
+    table: exceptions
+    result_key: items
+    description: Data-quality exceptions raised by validation rules.
+    params: {domain: {type: str}, asset_class: {type: str}, status: {type: str}, from: {type: date}, to: {type: date}, limit: {type: int, min: 1, max: 500}, offset: {type: int, min: 0}}
+  - id: exceptions_summary
+    path: /api/v1/exceptions/summary
+    table: exceptions
+    result_key: rows
+    description: Exception counts grouped by domain, asset class, status or rule.
+    params: {group_by: {type: str_list, enum: [domain, asset_class, status, rule_id]}, domain: {type: str}, asset_class: {type: str}, from: {type: date}, to: {type: date}}
+  - id: data_dictionary
+    path: /api/v1/data-dictionary
+    table: data_dictionary
+    result_key: items
+    description: Business definitions, owners and lineage of governed attributes.
+    params: {domain: {type: str}}
+metrics:
+  - id: open_dq_exceptions
+    endpoint: exceptions_summary
+    value_field: open_count
+    description: Open data-quality rule exceptions (reference-data validation); open = not closed.
+    unit: exceptions
+    dimensions: {domain: domain, asset_class: asset_class, status: status, rule_id: rule_id}
+    filters: {domain: {param: domain, type: str}, asset_class: {param: asset_class, type: str}}
+  - id: dq_exceptions_total
+    endpoint: exceptions_summary
+    value_field: total
+    description: All data-quality rule exceptions (reference-data validation) in the window, open or closed.
+    unit: exceptions
+    dimensions: {domain: domain, asset_class: asset_class, status: status, rule_id: rule_id}
+    filters: {domain: {param: domain, type: str}, asset_class: {param: asset_class, type: str}}

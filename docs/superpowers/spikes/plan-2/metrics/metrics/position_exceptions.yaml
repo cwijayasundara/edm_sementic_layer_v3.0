@@ -1,0 +1,20 @@
+id: position_exceptions
+source: assetrecon
+description: Position/transaction reconciliation exceptions raised by recon runs.
+type: count
+expr: count(*)
+from: recon_exceptions
+time_column: business_date
+dimensions:
+  cause_code: cause_code
+  business_date: business_date
+  fund_group: fund_group
+  portfolio_id: portfolio_id
+filters:
+  cause_code: {expr: cause_code, type: str}
+  fund_group: {expr: fund_group, type: str}
+  portfolio_id: {expr: portfolio_id, type: str}
+  status: {expr: status, type: str}
+  business_date: {expr: business_date, type: date}
+unit: exceptions
+default_order: metric_desc

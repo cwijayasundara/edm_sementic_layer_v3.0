@@ -1,0 +1,55 @@
+# Seed query history: question -> verified plan. The four demo stories come first.
+# metrics: governed metric ids (resolved against the SQL metric registry and the REST endpoint-metric registry).
+# plan: one line naming the metric, dimensions, filters, the date window (group by the date dimension and keep the
+#   business dates wanted: the gateway takes no time_range) and how to read the result. Method only: never a
+#   result figure, share or entity id (the graph gate is scope-only; a row-restricted caller reads every plan it can
+#   see). load_knowledge() rejects plans that look like results (plan_result_leaks).
+questions:
+  - question: "Are price conflicts up this week, and which vendor and asset class is driving it?"
+    metrics: [price_conflicts]
+    plan: "run_metric(price_conflicts, dims=[vendor_id, asset_class]) over the trailing 5 business days and the 5 before for week over week; compare the two totals for the change, then rank the vendor x asset class cells by their share of this week's conflicts to find the driver"
+    status: verified
+  - question: "Which feeds were late, and is one source responsible?"
+    metrics: [late_feeds]
+    plan: "run_metric(late_feeds, dims=[source_id, business_date]); keep the last 6 business dates up to the as-of date, total per source and order by count; one source is responsible when the top row clearly outweighs the runner-up"
+    status: verified
+  - question: "Which portfolios have position exceptions right now?"
+    metrics: [position_exceptions]
+    plan: "run_metric(position_exceptions, dims=[portfolio_id, business_date]), all statuses; keep the last 6 business dates up to the as-of date, divide each portfolio's total by those days for a daily rate and compare portfolios against the rest"
+    status: verified
+  - question: "Which legal entity has the most aged USD breaks?"
+    metrics: [aged_open_breaks]
+    plan: "run_metric(aged_open_breaks, dims=[legal_entity_id], filters={ccy: USD}); aged = status <> 'closed' AND age_days > 5; the top row is the answer, its share of the column total shows how concentrated the aging is"
+    status: verified
+  - question: "How many open breaks are there by region?"
+    metrics: [open_breaks]
+    plan: "run_metric(open_breaks, dims=[region])"
+    status: verified
+  - question: "What is the total open break amount per currency?"
+    metrics: [open_break_amount]
+    plan: "run_metric(open_break_amount, dims=[ccy]); amounts are never summed across currencies"
+    status: verified
+  - question: "What is the auto match rate by region, and how many manual matches were there?"
+    metrics: [auto_match_rate, manual_matches]
+    plan: "run_metric(auto_match_rate, dims=[region]) and run_metric(manual_matches, dims=[region]); combine on region"
+    status: verified
+  - question: "What share of feeds arrived on time, and how late were the late ones?"
+    metrics: [feed_on_time_rate, avg_feed_latency_min]
+    plan: "run_metric(feed_on_time_rate, dims=[source_id]) and run_metric(avg_feed_latency_min, dims=[source_id]); combine on source_id"
+    status: verified
+  - question: "Which funds have NAV differences above 5 bps?"
+    metrics: [nav_breaches_above_5bps, nav_break_bps_max]
+    plan: "run_metric(nav_breaches_above_5bps, dims=[portfolio_id]) then run_metric(nav_break_bps_max, dims=[portfolio_id]) for the worst gap"
+    status: verified
+  - question: "How many reference data exceptions are open by domain?"
+    metrics: [open_dq_exceptions]
+    plan: "run_metric(open_dq_exceptions, dims=[domain])"
+    status: verified
+  - question: "What is the clean recon run rate by recon type?"
+    metrics: [clean_recon_run_rate, recon_unmatched_items]
+    plan: "run_metric(clean_recon_run_rate, dims=[recon_type]) and run_metric(recon_unmatched_items, dims=[recon_type]); recon types are position, cash, transaction and nav"
+    status: verified
+  - question: "How many open support tickets are there by category?"
+    metrics: [open_support_tickets]
+    plan: "run_metric(open_support_tickets, dims=[category, source_id])"
+    status: verified

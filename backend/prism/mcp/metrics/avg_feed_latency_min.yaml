@@ -1,0 +1,18 @@
+id: avg_feed_latency_min
+source: feedhub
+description: Average lateness in minutes of LATE deliveries only (failed or missing deliveries are excluded).
+type: avg
+expr: avg(latency_min)
+from: feed_deliveries
+base_filter: status = 'late'
+time_column: business_date
+dimensions:
+  source_id: source_id
+  source_type: source_type
+  business_date: business_date
+filters:
+  source_id: {expr: source_id, type: str}
+  source_type: {expr: source_type, type: str}
+unit: minutes
+default_order: metric_desc
+fine_grain_dimensions: [source_id, business_date]  # one delivery per source per date: never both for metrics-only

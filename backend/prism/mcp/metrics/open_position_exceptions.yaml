@@ -1,0 +1,20 @@
+id: open_position_exceptions
+source: assetrecon
+description: Open reconciliation exceptions between internal and custodian positions (open = status = 'open').
+type: count
+expr: count(*)
+from: recon_exceptions
+base_filter: status = 'open'
+time_column: business_date
+dimensions:
+  cause_code: cause_code
+  fund_group: fund_group
+  portfolio_id: portfolio_id
+  business_date: business_date
+filters:
+  cause_code: {expr: cause_code, type: str}
+  fund_group: {expr: fund_group, type: str}
+  portfolio_id: {expr: portfolio_id, type: str}
+unit: exceptions
+default_order: metric_desc
+fine_grain_dimensions: [portfolio_id, business_date]  # a portfolio's exceptions on one date can be a single row: never both for metrics-only

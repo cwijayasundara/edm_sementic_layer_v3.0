@@ -1,0 +1,20 @@
+id: late_feeds
+source: feedhub
+description: Feed deliveries that were not on time (late, failed or missing).
+type: count
+expr: count(*)
+from: feed_deliveries
+base_filter: status <> 'on_time'
+time_column: business_date
+dimensions:
+  source_id: source_id
+  business_date: business_date
+  status: status
+  source_type: source_type
+filters:
+  source_id: {expr: source_id, type: str}
+  status: {expr: status, type: str}
+  source_type: {expr: source_type, type: str}
+  business_date: {expr: business_date, type: date}
+unit: deliveries
+default_order: metric_desc

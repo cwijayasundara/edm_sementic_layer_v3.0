@@ -1,0 +1,16 @@
+id: clean_recon_run_rate
+source: assetrecon
+description: Share (0..1) of reconciliation runs with no unmatched items.
+type: ratio
+numerator: unmatched = 0
+from: recon_runs
+time_column: business_date
+dimensions:
+  recon_type: recon_type
+  fund_group: fund_group
+  business_date: business_date
+filters:
+  recon_type: {expr: recon_type, type: str}
+  fund_group: {expr: fund_group, type: str}
+unit: fraction
+default_order: metric_desc

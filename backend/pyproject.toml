@@ -1,0 +1,50 @@
+[project]
+name = "prism"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+  "fastapi>=0.115",
+  "anthropic>=0.60",
+  "uvicorn[standard]>=0.30",
+  "psycopg[binary]>=3.2",
+  "psycopg-pool>=3.2",
+  "pydantic-settings>=2.4",
+  "pyjwt>=2.9",
+  "honcho>=2.0",
+  "mcp>=2.2,<3",
+  "sqlglot>=30,<31",
+  "pyyaml>=6",
+  "httpx>=0.28",
+  "httpx2>=2.13,<3",
+  "anyio>=4.15,<5",
+  "neo4j>=6.3,<7",
+  "fastembed>=0.8,<0.9",
+  "duckdb>=1.3",
+]
+
+[project.scripts]
+prism-seed = "prism.sim.cli:main"
+prism-token = "prism.security.cli:main"
+
+[dependency-groups]
+dev = ["pytest>=8", "pytest-asyncio>=0.24"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["prism"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+pythonpath = ["."]
+testpaths = ["tests"]
+# live tests need the running stack (make test-live selects them with -m live, which overrides this)
+addopts = '-m "not live"'
+markers = [
+  "db: requires Postgres (make db)",
+  "neo4j: requires Neo4j (make db)",
+  "live: requires the running backend stack (scripts/start_backend.sh); deselected by default, run with make test-live",
+  "slow: full-profile story checks (run by default; deselect with -m \"not slow\")",
+]

@@ -1,0 +1,22 @@
+[project]
+name = "spike-neo4j"
+version = "0.1.0"
+description = "Add your description here"
+requires-python = ">=3.13"
+dependencies = [
+    "httpx>=0.28.1",
+    "neo4j>=6.3.1",
+    "numpy>=2.5.3",
+    "psycopg[binary]>=3.3.6",
+    "pydantic>=2.13.5",
+    "pydantic-settings>=2.15.0",
+    "pyjwt>=2.15.1",
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+    "pyyaml>=6.0.3",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+pythonpath = [".", "/Users/chamindawijayasundara/Documents/learning_101/edm_sementic_layer_v2.0/backend"]

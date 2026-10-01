@@ -1,0 +1,17 @@
+id: exception_mv_abs
+source: assetrecon
+description: Total absolute market-value difference of reconciliation exceptions between internal and custodian positions, across all statuses.
+type: sum
+expr: sum(abs(diff_mv))
+from: recon_exceptions
+time_column: business_date
+dimensions:
+  cause_code: cause_code
+  fund_group: fund_group
+  portfolio_id: portfolio_id
+filters:
+  cause_code: {expr: cause_code, type: str}
+  fund_group: {expr: fund_group, type: str}
+  portfolio_id: {expr: portfolio_id, type: str}
+unit: amount (base currency)
+default_order: metric_desc

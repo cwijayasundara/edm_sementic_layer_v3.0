@@ -1,0 +1,15 @@
+id: auto_match_rate
+source: cashrecon
+description: Share (0..1) of cash match groups matched automatically by the engine.
+type: ratio
+numerator: status = 'auto'
+from: match_groups
+dimensions:
+  region: region
+  matched_by: matched_by
+filters:
+  region: {expr: region, type: str}
+  matched_by: {expr: matched_by, type: str}
+  rule_id: {expr: rule_id, type: str}
+unit: fraction
+default_order: metric_desc

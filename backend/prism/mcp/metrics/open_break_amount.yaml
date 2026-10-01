@@ -1,0 +1,21 @@
+id: open_break_amount
+source: cashrecon
+description: Total amount of open cash breaks (open = status <> 'closed'), per currency; amounts are never summed across currencies, so ccy is a required dimension.
+type: sum
+expr: sum(amount)
+from: breaks
+base_filter: status <> 'closed'
+time_column: opened_on
+dimensions:
+  region: region
+  ccy: ccy
+  legal_entity_id: legal_entity_id
+  break_type: break_type
+filters:
+  region: {expr: region, type: str}
+  ccy: {expr: ccy, type: str}
+  legal_entity_id: {expr: legal_entity_id, type: str}
+  break_type: {expr: break_type, type: str}
+unit: amount (transaction currency)
+default_order: metric_desc
+required_dimensions: [ccy]

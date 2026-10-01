@@ -1,0 +1,9 @@
+refmaster_api: uvicorn prism.sources.refmaster_api.app:create_app --factory --host 127.0.0.1 --port 8101
+marketmaster_api: uvicorn prism.sources.marketmaster_api.app:create_app --factory --host 127.0.0.1 --port 8102
+mcp_refmaster: uvicorn prism.mcp.servers:refmaster_app --factory --host 127.0.0.1 --port 8201
+mcp_marketmaster: uvicorn prism.mcp.servers:marketmaster_app --factory --host 127.0.0.1 --port 8202
+mcp_cashrecon: uvicorn prism.mcp.servers:cashrecon_app --factory --host 127.0.0.1 --port 8203
+mcp_assetrecon: uvicorn prism.mcp.servers:assetrecon_app --factory --host 127.0.0.1 --port 8204
+mcp_feedhub: uvicorn prism.mcp.servers:feedhub_app --factory --host 127.0.0.1 --port 8205
+gateway: uvicorn prism.gateway.server:create_app_from_env --factory --host 127.0.0.1 --port ${PRISM_GATEWAY_PORT:-8200}
+agent: uvicorn prism.agent.api:create_app_from_env --factory --host 127.0.0.1 --port ${PRISM_AGENT_PORT:-8000}

@@ -1,0 +1,118 @@
+# Hand-written mini ontology / glossary / join keys / seed history for the spike.
+# Refs: table:<source>.<table>  column:<source>.<table>.<column>  endpoint:<source>.<endpoint_id>
+#       metric:<id>  concept:<Name>  term:<slug>
+sources:
+  refmaster:    {kind: rest, mcp_server: refmaster-mcp}
+  marketmaster: {kind: rest, mcp_server: marketmaster-mcp}
+  cashrecon:    {kind: sql,  mcp_server: cashrecon-mcp}
+  assetrecon:   {kind: sql,  mcp_server: assetrecon-mcp}
+  feedhub:      {kind: sql,  mcp_server: feedhub-mcp}
+
+concepts:
+  - name: Security
+    description: A tradable financial instrument (equity, bond, fund) identified by security_id / ISIN.
+    implemented_by: [table:refmaster.securities, table:marketmaster.instruments, endpoint:refmaster.securities, endpoint:marketmaster.instruments]
+    identified_by: [column:refmaster.securities.security_id, column:refmaster.securities.isin, column:marketmaster.instruments.security_id]
+  - name: LegalEntity
+    description: A legal entity (issuer, account owner) identified by its LEI / entity id.
+    implemented_by: [table:refmaster.legal_entities, endpoint:refmaster.entities]
+    identified_by: [column:refmaster.legal_entities.entity_id, column:refmaster.legal_entities.lei]
+  - name: Price
+    description: A price of a security on a date; the golden price is chosen from vendor quotes.
+    implemented_by: [table:marketmaster.golden_prices, table:marketmaster.vendor_prices, table:marketmaster.price_suspects, endpoint:marketmaster.prices_conflicts]
+    identified_by: [column:marketmaster.golden_prices.security_id]
+  - name: Vendor
+    description: A market-data price vendor with a default source ranking.
+    implemented_by: [table:marketmaster.vendors, endpoint:marketmaster.vendors]
+    identified_by: [column:marketmaster.vendors.vendor_id]
+  - name: Position
+    description: Holding of a security in a portfolio, from the internal book or the custodian.
+    implemented_by: [table:assetrecon.internal_positions, table:assetrecon.custodian_positions]
+    identified_by: [column:assetrecon.internal_positions.security_id]
+  - name: Portfolio
+    description: An investment fund / portfolio belonging to a fund group.
+    implemented_by: [table:assetrecon.portfolios]
+    identified_by: [column:assetrecon.portfolios.portfolio_id]
+  - name: Break
+    description: A cash reconciliation break between bank statement and ledger.
+    implemented_by: [table:cashrecon.breaks]
+    identified_by: [column:cashrecon.breaks.break_id]
+  - name: CashAccount
+    description: A nostro cash account held at a bank for a legal entity.
+    implemented_by: [table:cashrecon.cash_accounts]
+    identified_by: [column:cashrecon.cash_accounts.account_id]
+  - name: FeedDelivery
+    description: One delivery of a data feed from a source on a business date.
+    implemented_by: [table:feedhub.feed_deliveries]
+    identified_by: [column:feedhub.feed_deliveries.delivery_id]
+  - name: DataSource
+    description: An external data provider - bank, custodian or vendor - that sends feeds.
+    implemented_by: [table:feedhub.sources, table:assetrecon.custodians]
+    identified_by: [column:feedhub.sources.source_id]
+
+concept_relations:
+  - [Security, ISSUED_BY, LegalEntity]
+  - [Price, PRICE_OF, Security]
+  - [Price, QUOTED_BY, Vendor]
+  - [Position, HOLDS, Security]
+  - [Position, HELD_IN, Portfolio]
+  - [Break, RAISED_ON, CashAccount]
+  - [CashAccount, OWNED_BY, LegalEntity]
+  - [FeedDelivery, FEEDS, Position]
+  - [FeedDelivery, SENT_BY, DataSource]
+
+glossaries: [cash, assets, feeds, reference, market]
+
+terms:
+  - {name: Break, glossary: cash, defines: [concept:Break], synonyms: [cash break, recon break, reconciliation break], definition: A difference between bank statement and ledger that did not auto-match.}
+  - {name: Open break, glossary: cash, defines: [metric:open_breaks], broader: Break, synonyms: [outstanding break, unresolved break], definition: "A break whose status is not closed (open or investigating)."}
+  - {name: Aged break, glossary: cash, defines: [metric:aged_open_breaks], broader: Open break, synonyms: [old break, stale break], definition: An open break older than 5 days., rule: "status <> 'closed' AND age_days > 5"}
+  - {name: Break amount, glossary: cash, defines: [metric:open_break_amount], broader: Break, synonyms: [break value, break exposure], definition: Absolute amount of open breaks per currency.}
+  - {name: Nostro, glossary: cash, defines: [concept:CashAccount], tags: [column:cashrecon.cash_accounts.nostro_no], synonyms: [nostro account, cash account, bank account], definition: Our account held at a correspondent bank., anchor: 0}
+  - {name: Auto-match rate, glossary: cash, defines: [metric:auto_match_rate], synonyms: [STP rate, automatic matching rate], definition: Share of matches made automatically by rules.}
+  - {name: Manual match, glossary: cash, defines: [metric:manual_matches], synonyms: [manual matching, hand match], definition: A match made by an operator.}
+  - {name: Late feed, glossary: feeds, defines: [metric:late_feeds], synonyms: [delayed feed, late delivery], definition: A feed delivery received after its expected time.}
+  - {name: Feed latency, glossary: feeds, defines: [metric:avg_feed_latency_min], synonyms: [delivery delay, feed lag], definition: Minutes between expected and actual receipt.}
+  - {name: On-time delivery, glossary: feeds, defines: [metric:feed_on_time_rate], synonyms: [on time rate, SLA met], definition: Share of deliveries received on time.}
+  - {name: Missing delivery, glossary: feeds, defines: [metric:missing_or_failed_deliveries], synonyms: [failed feed, missing file], definition: A delivery that never arrived or failed.}
+  - {name: Support ticket, glossary: feeds, defines: [metric:open_support_tickets], synonyms: [vendor ticket, incident], definition: A ticket raised against a data source.}
+  - {name: Position exception, glossary: assets, defines: [metric:position_exceptions, metric:open_position_exceptions], synonyms: [position break, holdings mismatch], definition: Difference between internal and custodian positions.}
+  - {name: NAV break, glossary: assets, defines: [metric:nav_break_bps_max, metric:nav_breaches_above_5bps], synonyms: [NAV difference, NAV tolerance breach], definition: Difference between administrator and internal NAV in bps.}
+  - {name: Recon run, glossary: assets, defines: [metric:clean_recon_run_rate, metric:recon_unmatched_items], synonyms: [reconciliation run], definition: One reconciliation execution for a portfolio and date.}
+  - {name: Security, glossary: reference, defines: [concept:Security], synonyms: [instrument, asset, ISIN], definition: A tradable financial instrument.}
+  - {name: Legal entity, glossary: reference, defines: [concept:LegalEntity], tags: [column:refmaster.legal_entities.entity_id], synonyms: [issuer, LEI, counterparty], definition: A legally registered organisation.}
+  - {name: Issuer country, glossary: reference, broader: Legal entity, tags: [column:refmaster.legal_entities.country], synonyms: [country of issuer, domicile], definition: Country of the legal entity that issued the security.}
+  - {name: Golden copy, glossary: market, defines: [concept:Price], synonyms: [golden price, golden record], definition: The single trusted price chosen from vendor quotes.}
+  - {name: Price conflict, glossary: market, defines: [metric:price_conflicts], synonyms: [price-source conflict, vendor price deviation, price suspect], definition: A vendor quote deviating from the golden price., anchor: 1}
+  - {name: Price vendor, glossary: market, defines: [concept:Vendor], synonyms: [pricing source, data vendor], definition: A market-data vendor supplying quotes.}
+  - {name: Data-quality exception, glossary: reference, defines: [metric:open_dq_exceptions, metric:dq_exceptions_total], synonyms: [DQ exception, suspect, validation failure], definition: A reference-data record failing a validation rule.}
+  - {name: Custodian, glossary: assets, defines: [concept:DataSource], tags: [column:assetrecon.custodians.custodian_id], synonyms: [custody bank, depositary], definition: Bank holding the fund assets in custody.}
+  - {name: Feed source, glossary: feeds, defines: [concept:DataSource], tags: [column:feedhub.sources.source_id], synonyms: [data provider, sender], definition: An external party delivering feeds.}
+  - {name: Market value, glossary: assets, defines: [metric:exception_mv_abs], tags: [column:assetrecon.internal_positions.mv], synonyms: [MV, valuation], definition: Quantity times price in base currency.}
+
+# Hand-authored cross-source join keys (names differ across sources, so they cannot be inferred).
+same_key_as:
+  - [column:refmaster.securities.security_id, column:marketmaster.instruments.security_id]
+  - [column:refmaster.securities.isin, column:marketmaster.instruments.isin]
+  - [column:refmaster.securities.security_id, column:assetrecon.internal_positions.security_id]
+  - [column:refmaster.securities.security_id, column:assetrecon.custodian_positions.security_id]
+  - [column:refmaster.securities.security_id, column:assetrecon.recon_exceptions.security_id]
+  - [column:refmaster.legal_entities.entity_id, column:cashrecon.cash_accounts.legal_entity_id]
+  - [column:refmaster.legal_entities.entity_id, column:cashrecon.breaks.legal_entity_id]
+  - [column:refmaster.legal_entities.entity_id, column:marketmaster.esg_scores.entity_id]
+  - [column:feedhub.sources.source_id, column:assetrecon.custodians.feed_source_id]
+  - [column:feedhub.sources.source_id, column:cashrecon.cash_accounts.bank_source_id]
+  - [column:feedhub.feed_deliveries.delivery_id, column:assetrecon.custodian_positions.delivery_id]
+
+# Anchor vectors (hand-crafted, one-hot in dims 0..9) for predictable vector neighbours.
+anchors:
+  metric:price_conflicts: 1
+  column:cashrecon.cash_accounts.nostro_no: 0
+
+history:
+  - {q: "How many open breaks by region?", persona: cash_ops_emea, kind: metric, source: cashrecon, text: "run_metric(open_breaks, dims=[region])", used: [metric:open_breaks, table:cashrecon.breaks]}
+  - {q: "Which feeds were late yesterday?", persona: cash_ops_emea, kind: metric, source: feedhub, text: "run_metric(late_feeds, dims=[source_id], time=yesterday)", used: [metric:late_feeds, table:feedhub.feed_deliveries]}
+  - {q: "Price conflicts by vendor last week", persona: steward, kind: metric, source: marketmaster, text: "run_metric(price_conflicts, dims=[vendor_id], time=last_7d)", used: [metric:price_conflicts, endpoint:marketmaster.prices_conflicts_summary]}
+  - {q: "Open position exceptions for Growth funds", persona: invest_ops_growth, kind: metric, source: assetrecon, text: "run_metric(open_position_exceptions, filters={fund_group: Growth})", used: [metric:open_position_exceptions, table:assetrecon.recon_exceptions]}
+  - {q: "Aged breaks older than 5 days by legal entity", persona: cash_ops_emea, kind: metric, source: cashrecon, text: "run_metric(aged_open_breaks, dims=[legal_entity_id])", used: [metric:aged_open_breaks, table:cashrecon.breaks]}
+  - {q: "Security price conflicts by issuer country", persona: steward, kind: endpoint, source: marketmaster, text: "prices_conflicts -> securities(security_id) -> entities(country); combine in DuckDB", used: [metric:price_conflicts, table:refmaster.securities, table:refmaster.legal_entities, table:marketmaster.instruments]}

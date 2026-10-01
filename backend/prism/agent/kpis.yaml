@@ -1,0 +1,5 @@
+steward:        [{metric_id: price_conflicts, label: Price-source conflicts}, {metric_id: open_dq_exceptions, label: Open DQ exceptions}]
+cash_ops_emea:  [{metric_id: open_breaks, label: Open breaks}, {metric_id: aged_open_breaks, label: Aged open breaks}, {metric_id: auto_match_rate, label: Auto-match rate, unit: "%", scale: 100}, {metric_id: open_break_amount, label: Open break amount (USD), unit: USD, dimensions: [ccy], filters: {ccy: USD}}]
+invest_ops_growth: [{metric_id: open_position_exceptions, label: Open position exceptions}, {metric_id: nav_breaches_above_5bps, label: NAV breaches > 5bps}, {metric_id: feed_on_time_rate, label: Feeds on time, unit: "%", scale: 100}]
+bi_analyst:     [{metric_id: late_feeds, label: Late feeds}, {metric_id: open_breaks, label: Open breaks}, {metric_id: price_conflicts, label: Price-source conflicts}, {metric_id: open_position_exceptions, label: Open position exceptions}]
+head_data:      [{metric_id: late_feeds, label: Late feeds}, {metric_id: open_breaks, label: Open breaks}, {metric_id: price_conflicts, label: Price-source conflicts}, {metric_id: open_position_exceptions, label: Open position exceptions}]

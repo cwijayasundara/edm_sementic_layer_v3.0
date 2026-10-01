@@ -1,0 +1,69 @@
+# Labelled eval set. targets: any hit counts for hit@k; all targets must appear for all@k.
+# category: exact | synonym | paraphrase | abbrev | multi
+questions:
+  # ---------- exact-term (uses words in the metric id/description) ----------
+  - {q: "how many open breaks are there", targets: [metric:open_breaks], category: exact}
+  - {q: "show aged open breaks by legal entity", targets: [metric:aged_open_breaks], category: exact}
+  - {q: "what is the auto match rate by region", targets: [metric:auto_match_rate], category: exact}
+  - {q: "average break age in days", targets: [metric:avg_break_age], category: exact}
+  - {q: "break resolution rate this month", targets: [metric:break_resolution_rate], category: exact}
+  - {q: "clean recon run rate by account", targets: [metric:clean_recon_run_rate], category: exact}
+  - {q: "number of late feeds today", targets: [metric:late_feeds], category: exact}
+  - {q: "missing or failed deliveries by vendor", targets: [metric:missing_or_failed_deliveries], category: exact}
+  - {q: "open support tickets", targets: [metric:open_support_tickets], category: exact}
+  - {q: "total open break amount per currency", targets: [metric:open_break_amount], category: exact}
+  - {q: "price conflicts by vendor and asset class", targets: [metric:price_conflicts], category: exact}
+  - {q: "open data quality exceptions by domain", targets: [metric:open_dq_exceptions], category: exact}
+  # ---------- synonym (uses a glossary synonym, not the metric wording) ----------
+  - {q: "Which vendors drove price disagreements last week?", targets: [metric:price_conflicts, term:price conflict], category: synonym}
+  - {q: "how many unmatched cash items are older than five days by entity", targets: [metric:aged_open_breaks, term:aged break], category: synonym}
+  - {q: "are any custodian files late today", targets: [metric:late_feeds, term:late feed], category: synonym}
+  - {q: "show me open data quality issues by domain", targets: [metric:open_dq_exceptions], category: synonym}
+  - {q: "auto match percentage by region", targets: [metric:auto_match_rate, term:auto-match rate], category: synonym}
+  - {q: "how many tickets are still open", targets: [metric:open_support_tickets, term:support ticket], category: synonym}
+  - {q: "what is our STP rate on cash matching", targets: [metric:auto_match_rate, term:auto-match rate], category: synonym}
+  - {q: "count of hand matched cash items", targets: [metric:manual_matches, term:manual match], category: synonym}
+  - {q: "outstanding position mismatches versus the custodian", targets: [metric:open_position_exceptions, term:position break], category: synonym}
+  - {q: "how many delayed files did we get this week", targets: [metric:late_feeds, term:late feed], category: synonym}
+  - {q: "price mismatches against the golden record", targets: [metric:price_conflicts, term:price conflict], category: synonym}
+  - {q: "unresolved incidents raised on feeds", targets: [metric:open_support_tickets], category: synonym}
+  # ---------- paraphrase (words deliberately outside names and synonym lists) ----------
+  - {q: "which funds have NAV differences above 5 bps", targets: [metric:nav_breaches_above_5bps], category: paraphrase}
+  - {q: "what's the worst gap between the admin's fund valuation and ours", targets: [metric:nav_break_bps_max], category: paraphrase}
+  - {q: "how long have unreconciled cash items been sitting around on average", targets: [metric:avg_break_age], category: paraphrase}
+  - {q: "what fraction of cash discrepancies have we closed out", targets: [metric:break_resolution_rate], category: paraphrase}
+  - {q: "how often do reconciliation jobs finish with zero leftovers", targets: [metric:clean_recon_run_rate], category: paraphrase}
+  - {q: "by how many minutes are tardy files behind schedule", targets: [metric:avg_feed_latency_min], category: paraphrase}
+  - {q: "what share of files showed up on schedule", targets: [metric:feed_on_time_rate], category: paraphrase}
+  - {q: "files that never showed up", targets: [metric:missing_or_failed_deliveries], category: paraphrase}
+  - {q: "how much money is tied up in unreconciled cash", targets: [metric:open_break_amount], category: paraphrase}
+  - {q: "dollar value of holdings disagreements with the depository", targets: [metric:exception_mv_abs], category: paraphrase}
+  - {q: "total items left unpaired after matching", targets: [metric:recon_unmatched_items], category: paraphrase}
+  - {q: "every reference data validation failure this quarter, open or closed", targets: [metric:dq_exceptions_total], category: paraphrase}
+  - {q: "how many times did the ops team have to pair items by hand", targets: [metric:manual_matches], category: paraphrase}
+  - {q: "is the fund accountant's valuation drifting from our own figure", targets: [metric:nav_break_bps_max, metric:nav_breaches_above_5bps, term:NAV break], category: paraphrase}
+  # ---------- abbreviation / jargon ----------
+  - {q: "NAV breaks > 5bp", targets: [metric:nav_breaches_above_5bps], category: abbrev}
+  - {q: "max NAV diff in bps", targets: [metric:nav_break_bps_max], category: abbrev}
+  - {q: "DQ exceptions open", targets: [metric:open_dq_exceptions], category: abbrev}
+  - {q: "open breaks amt by ccy", targets: [metric:open_break_amount], category: abbrev}
+  - {q: "abs MV of recon exceptions", targets: [metric:exception_mv_abs], category: abbrev}
+  - {q: "avg feed latency mins", targets: [metric:avg_feed_latency_min], category: abbrev}
+  - {q: "what does LEI stand for", targets: [term:LEI], category: abbrev}
+  - {q: "define ISIN", targets: [term:ISIN], category: abbrev}
+  # ---------- glossary-only definitional ----------
+  - {q: "what is a nostro account", targets: [term:nostro account], category: exact}
+  - {q: "what is the golden copy", targets: [term:golden copy], category: exact}
+  - {q: "who is responsible for fixing data issues in a domain", targets: [term:data steward], category: paraphrase}
+  - {q: "what is maker-checker", targets: [term:four-eyes approval], category: synonym}
+  - {q: "what is a dividend or stock split event called", targets: [term:corporate action], category: synonym}
+  # ---------- multi-concept ----------
+  - {q: "open breaks older than 5 days by currency and their total amount", targets: [metric:aged_open_breaks, metric:open_break_amount], category: multi}
+  - {q: "compare the auto match rate with the number of manual matches by region", targets: [metric:auto_match_rate, metric:manual_matches], category: multi}
+  - {q: "late feeds and open support tickets per vendor", targets: [metric:late_feeds, metric:open_support_tickets], category: multi}
+  - {q: "position exceptions and their market value difference by custodian", targets: [metric:position_exceptions, metric:exception_mv_abs], category: multi}
+  - {q: "all reconciliation exceptions against custodian positions regardless of status", targets: [metric:position_exceptions], category: multi}
+  - {q: "open vs total data quality exceptions by asset class", targets: [metric:open_dq_exceptions, metric:dq_exceptions_total], category: multi}
+  - {q: "on-time rate and average lateness of feeds", targets: [metric:feed_on_time_rate, metric:avg_feed_latency_min], category: multi}
+  - {q: "which cash breaks are not closed yet and how old are they", targets: [metric:open_breaks, metric:avg_break_age], category: multi}
+  - {q: "unmatched items across recon runs and the share of clean runs", targets: [metric:recon_unmatched_items, metric:clean_recon_run_rate], category: multi}

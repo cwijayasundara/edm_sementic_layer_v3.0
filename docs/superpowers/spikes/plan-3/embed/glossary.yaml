@@ -1,0 +1,122 @@
+# Hand-written business glossary (frozen BEFORE writing eval questions).
+terms:
+  - term: nostro account
+    synonyms: [cash account, bank account, correspondent account]
+    definition: A bank account held with a correspondent bank whose statement is reconciled against internal cash ledger entries.
+  - term: break
+    synonyms: [unmatched item, reconciliation break, recon break, discrepancy]
+    definition: An item that could not be matched between the internal record and the external statement during reconciliation.
+  - term: aged break
+    synonyms: [old break, stale break, overdue break]
+    definition: An open break older than 5 days.
+  - term: golden copy
+    synonyms: [golden price, golden record, mastered record, master record]
+    definition: The mastered, validated version of a price or reference record chosen from multiple vendor sources.
+  - term: price conflict
+    synonyms: [price disagreement, price mismatch, price discrepancy, price challenge]
+    definition: A vendor price quote that deviates from the golden price beyond tolerance.
+  - term: stale price
+    synonyms: [unchanged price, frozen price, old price]
+    definition: A price that has not been updated by the vendor for longer than the expected refresh interval.
+  - term: late feed
+    synonyms: [delayed file, late delivery, overdue feed]
+    definition: A data feed delivery that did not arrive by its scheduled cut-off time, or failed or was missing.
+  - term: custodian
+    synonyms: [custodian bank, depository, safekeeping agent]
+    definition: The institution that holds securities on behalf of the fund and reports official positions.
+  - term: NAV break
+    synonyms: [NAV difference, NAV variance, net asset value discrepancy]
+    definition: A difference between the fund administrator's net asset value and the internally calculated NAV, measured in basis points.
+  - term: exception
+    synonyms: [issue, alert, rule failure]
+    definition: A record flagged by a control or rule for investigation, such as a position mismatch or a data-quality rule failure.
+  - term: four-eyes approval
+    synonyms: [maker-checker, dual control, second approval]
+    definition: A control requiring a second person to approve a change before it takes effect.
+  - term: auto-match rate
+    synonyms: [automatic match rate, STP rate, straight-through matching]
+    definition: The share of items matched automatically by the matching engine without manual intervention.
+  - term: recon run
+    synonyms: [reconciliation run, matching run, recon job]
+    definition: One execution of a reconciliation process comparing two sources for a given date.
+  - term: position break
+    synonyms: [position mismatch, holdings difference, position exception]
+    definition: A difference between internal holdings and the custodian's reported position for a security.
+  - term: SLA
+    synonyms: [service level agreement, cut-off time, service level]
+    definition: The agreed deadline or quality target that a process or data delivery must meet.
+  - term: data steward
+    synonyms: [data owner, data custodian, steward]
+    definition: The person accountable for the quality and resolution of data issues in a data domain.
+  - term: corporate action
+    synonyms: [corp action, dividend, stock split, merger event]
+    definition: An event initiated by an issuer that changes securities, such as a dividend, split or merger.
+  - term: LEI
+    synonyms: [legal entity identifier]
+    definition: The 20-character ISO 17442 code that uniquely identifies a legal entity in financial transactions.
+  - term: ISIN
+    synonyms: [international securities identification number, security identifier]
+    definition: The 12-character ISO 6166 code that identifies a security.
+  - term: security master
+    synonyms: [instrument master, securities reference data, secmaster]
+    definition: The mastered reference database of securities and their static attributes.
+  - term: vendor
+    synonyms: [data vendor, price source, data provider, pricing source]
+    definition: An external provider supplying prices or reference data, such as Bloomberg or Refinitiv.
+  - term: asset class
+    synonyms: [instrument type, security type]
+    definition: A category of instruments such as equity, fixed income, FX or derivatives.
+  - term: fund group
+    synonyms: [fund family, fund umbrella, portfolio group]
+    definition: A grouping of funds managed or reported together.
+  - term: feed delivery
+    synonyms: [file delivery, data file, inbound feed]
+    definition: One scheduled arrival of a data file from a source system or vendor.
+  - term: support ticket
+    synonyms: [ticket, incident, help desk case, service request]
+    definition: A case raised with support about a feed or data problem.
+  - term: legal entity
+    synonyms: [entity, booking entity, company]
+    definition: A legally registered organisation such as a fund or bank subsidiary, used as a reporting dimension.
+  - term: data quality rule
+    synonyms: [DQ rule, validation rule, data check]
+    definition: A validation rule applied to reference data whose failures create data-quality exceptions.
+  - term: data domain
+    synonyms: [domain, subject area]
+    definition: A subject area of reference data such as securities, entities or prices.
+  - term: basis point
+    synonyms: [bps, bp, one hundredth of a percent]
+    definition: One hundredth of one percent (0.01%), used to measure small differences such as NAV breaks.
+  - term: market value
+    synonyms: [MV, valuation, position value]
+    definition: The value of a position at current market prices.
+  - term: base currency
+    synonyms: [reporting currency]
+    definition: The currency in which amounts are converted for aggregated reporting.
+  - term: region
+    synonyms: [geography, location, EMEA, APAC, AMER]
+    definition: The geographic area an entity or account belongs to.
+  - term: manual match
+    synonyms: [manual override, hand match, forced match]
+    definition: A match group created by an operations user rather than by the matching engine.
+  - term: fund administrator
+    synonyms: [administrator, fund accountant, third-party administrator]
+    definition: The external party that calculates the official NAV of a fund.
+  - term: open status
+    synonyms: [outstanding, unresolved, pending, investigating]
+    definition: An item that has not yet been closed or resolved.
+  - term: resolution
+    synonyms: [closure, fix, cleared]
+    definition: The act of closing a break or exception after investigation.
+  - term: currency
+    synonyms: [ccy, FX currency]
+    definition: The ISO 4217 currency of a transaction or amount.
+  - term: data lineage
+    synonyms: [provenance, lineage, source-to-target mapping]
+    definition: The trace of where a data element came from and how it was transformed.
+  - term: ESG score
+    synonyms: [sustainability score, environmental social governance rating]
+    definition: A rating of an entity's environmental, social and governance performance.
+  - term: tolerance
+    synonyms: [threshold, materiality threshold]
+    definition: The allowed deviation before a difference is treated as a break, conflict or exception.

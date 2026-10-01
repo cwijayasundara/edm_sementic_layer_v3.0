@@ -1,0 +1,64 @@
+# Hand-written ontology: concepts, concept relations and cross-source join keys.
+# Refs: table:<source>.<table>  column:<source>.<table>.<column>  endpoint:<source>.<endpoint_id>
+concepts:
+  - name: Security
+    description: A tradable financial instrument (equity, bond, fund) identified by security_id / ISIN.
+    implemented_by: [table:refmaster.securities, table:marketmaster.instruments, endpoint:refmaster.securities, endpoint:marketmaster.instruments]
+    identified_by: [column:refmaster.securities.security_id, column:refmaster.securities.isin, column:marketmaster.instruments.security_id]
+  - name: LegalEntity
+    description: A legal entity (issuer, account owner) identified by its LEI / entity id.
+    implemented_by: [table:refmaster.legal_entities, endpoint:refmaster.entities]
+    identified_by: [column:refmaster.legal_entities.entity_id, column:refmaster.legal_entities.lei]
+  - name: Price
+    description: A price of a security on a date; the golden price is chosen from vendor quotes.
+    implemented_by: [table:marketmaster.golden_prices, table:marketmaster.vendor_prices, table:marketmaster.price_suspects, endpoint:marketmaster.prices_conflicts]
+    identified_by: [column:marketmaster.golden_prices.security_id, column:marketmaster.golden_prices.price_date]
+  - name: Vendor
+    description: A market-data price vendor with a default source ranking.
+    implemented_by: [table:marketmaster.vendors, endpoint:marketmaster.vendors]
+    identified_by: [column:marketmaster.vendors.vendor_id]
+  - name: Position
+    description: Holding of a security in a portfolio, from the internal book or the custodian.
+    implemented_by: [table:assetrecon.internal_positions, table:assetrecon.custodian_positions]
+    identified_by: [column:assetrecon.internal_positions.portfolio_id, column:assetrecon.internal_positions.security_id]
+  - name: Portfolio
+    description: An investment fund / portfolio belonging to a fund group.
+    implemented_by: [table:assetrecon.portfolios]
+    identified_by: [column:assetrecon.portfolios.portfolio_id]
+  - name: Break
+    description: A cash reconciliation break between bank statement and ledger.
+    implemented_by: [table:cashrecon.breaks]
+    identified_by: [column:cashrecon.breaks.break_id]
+  - name: CashAccount
+    description: A nostro cash account held at a bank for a legal entity.
+    implemented_by: [table:cashrecon.cash_accounts]
+    identified_by: [column:cashrecon.cash_accounts.account_id]
+  - name: FeedDelivery
+    description: One delivery of a data feed from a source on a business date.
+    implemented_by: [table:feedhub.feed_deliveries]
+    identified_by: [column:feedhub.feed_deliveries.delivery_id]
+  - name: DataSource
+    description: An external data provider (bank, custodian or vendor) that sends feeds.
+    implemented_by: [table:feedhub.sources, table:assetrecon.custodians]
+    identified_by: [column:feedhub.sources.source_id]
+
+# [source concept, relation, target concept]
+concept_relations:
+  - [Security, ISSUED_BY, LegalEntity]
+  - [Price, PRICE_OF, Security]
+  - [Price, QUOTED_BY, Vendor]
+  - [Position, HOLDS, Security]
+  - [Position, HELD_IN, Portfolio]
+  - [Break, RAISED_ON, CashAccount]
+  - [CashAccount, OWNED_BY, LegalEntity]
+  - [FeedDelivery, FEEDS, Position]
+  - [FeedDelivery, SENT_BY, DataSource]
+
+# Hand-authored cross-source join keys: every column in a group holds the same identifier even where the names
+# differ, so the groups cannot be inferred from the DDL.
+same_key:
+  - [column:refmaster.securities.security_id, column:marketmaster.instruments.security_id, column:assetrecon.internal_positions.security_id, column:assetrecon.custodian_positions.security_id, column:assetrecon.recon_exceptions.security_id]
+  - [column:refmaster.securities.isin, column:marketmaster.instruments.isin]
+  - [column:refmaster.legal_entities.entity_id, column:cashrecon.cash_accounts.legal_entity_id, column:cashrecon.breaks.legal_entity_id, column:marketmaster.esg_scores.entity_id, column:refmaster.securities.issuer_entity_id]
+  - [column:feedhub.sources.source_id, column:assetrecon.custodians.feed_source_id, column:cashrecon.cash_accounts.bank_source_id]
+  - [column:feedhub.feed_deliveries.delivery_id, column:assetrecon.custodian_positions.delivery_id]

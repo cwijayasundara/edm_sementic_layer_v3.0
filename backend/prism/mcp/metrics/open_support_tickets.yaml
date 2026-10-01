@@ -1,0 +1,17 @@
+id: open_support_tickets
+source: feedhub
+description: Support tickets on feeds that are open (open = status = 'open').
+type: count
+expr: count(*)
+from: support_tickets
+base_filter: status = 'open'
+dimensions:
+  category: category
+  source_id: source_id
+  source_type: source_type
+filters:
+  category: {expr: category, type: str}
+  source_id: {expr: source_id, type: str}
+  source_type: {expr: source_type, type: str}
+unit: tickets
+default_order: metric_desc
