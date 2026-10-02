@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { KPIS, RECORD_ID, TOKEN, WIDGET, chatBody, rows } from "./fixtures";
+import { KPIS, LINEAGE, RECORD_ID, TOKEN, WIDGET, chatBody, rows } from "./fixtures";
 
 const AGENT = process.env.NEXT_PUBLIC_AGENT_URL ?? "http://localhost:8000";
 
@@ -28,6 +28,7 @@ test.describe("mocked agent", () => {
         fetched.push(url.pathname.split("/").pop()!);
         return json(rows(Number(url.searchParams.get("offset")), Number(url.searchParams.get("limit"))));
       }
+      if (url.pathname.startsWith("/lineage/")) return json(LINEAGE);
       if (url.pathname === "/dashboards" && req.method() === "POST") { saved.push(req.postDataJSON()); return json({ id: "d1" }, 201); }
       if (url.pathname === "/dashboards") return json({ dashboards: saved.length
         ? [{ id: "d1", title: "Morning check", created_at: "2026-10-01T09:00:00Z", widget_count: 2 }] : [] });
@@ -69,6 +70,12 @@ test.describe("mocked agent", () => {
     await expect(page.getByText("Rows 1–50 of 60")).toBeVisible();
     await page.getByRole("button", { name: "Next", exact: true }).click();
     await expect(page.getByText("Rows 51–60 of 60")).toBeVisible();
+    await page.keyboard.press("Escape");
+
+    await page.getByRole("button", { name: "Context graph" }).first().click();
+    await expect(page.getByRole("dialog").getByText("Context graph")).toBeVisible();
+    await page.getByText("List view").click();
+    await expect(page.getByRole("dialog").getByText("cashrecon.breaks")).toBeVisible();
     await page.keyboard.press("Escape");
 
     await page.getByRole("button", { name: "Pin", exact: true }).first().click();

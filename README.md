@@ -61,7 +61,7 @@ The UI must be on port 3000: the agent accepts browser requests from `http://loc
 
 2. The KPI strip shows that persona's tiles.
 3. Ask a question in the assistant, for example "Which legal entity has the most USD breaks open longer than 5 days?"
-   Widgets stream onto the canvas. "view query · source rows" shows how each was produced.
+   Widgets stream onto the canvas. "view query · source rows" shows how each was produced. **Context graph** on a widget shows the metric, dimensions, tables, columns and source it came from.
 4. Press **Correct? Confirm** on an answer you trust. Only confirmed answers feed the query history (`make distill`).
 5. Pin widgets, then **Save pinned** to keep them. **Dashboards** re-runs a saved dashboard with your current access
    (no model call).
@@ -166,6 +166,7 @@ metric-backed answer; pressing it calls `POST /answers/{record_id}/confirm` on t
                                                      │  policy (catalog from the graph): metric routing, sensitive /
                                                      │    fine-grain / metrics-only refusals, existence never leaked
      search_context ─▶ local embedder + Neo4j context graph (role-gated Cypher) -> context pack (<= ~3k tokens)
+     lineage ─▶ role-gated Cypher over the context graph (same gate as search_context)
      run_metric / query_source ─▶ per-(sub, source) semaphore + retry ─▶ source MCP servers :8201-8205
                                     (fresh <source>-mcp token per call)   refmaster, marketmaster (-> REST APIs
                                                                           :8101/:8102), cashrecon, assetrecon, feedhub
@@ -173,7 +174,7 @@ metric-backed answer; pressing it calls `POST /answers/{record_id}/confirm` on t
      results ─▶ in-memory ResultStore (per-sub handles, 15 min) ─▶ get_rows pages, combine (hardened DuckDB)
      every call ─▶ app.audit (one row);  record_answer ─▶ app.query_log ──(make distill)──▶ graph history layer
 ```
-The only agent-facing door to the data: one MCP server (`gateway-mcp` audience tokens, stateless HTTP) with seven tools.
+The only agent-facing door to the data: one MCP server (`gateway-mcp` audience tokens, stateless HTTP) with eight tools.
 Identity and entitlements come from the verified token, never from tool arguments; every call writes one row to
 `app.audit` (catalog names, counts and codes only: no row values, tokens or question text; the question is kept as
 an HMAC).
@@ -187,6 +188,7 @@ an HMAC).
 | `combine(sql, handles)` | one DuckDB SELECT over your own handles (`{"t": "<handle>"}`), in memory |
 | `record_answer(question, plan, handles)` | query history (`app.query_log`): the metrics/dimensions of >= 1 of your own live handles, never the plan text; stored unverified with `metric_backed` and a returned `record_id` |
 | `confirm_answer(record_id)` | human confirmation: sets `verified` on your own metric-backed answer; `not_confirmable` otherwise (never says why) |
+| `lineage(handle)` | the role-gated part of the context graph behind one of your own result handles (UI only; not offered to the agent's model) |
 
 Errors read `Error executing tool <name>: <code>: <message>` (codes such as `not_permitted`, `metrics_only`,
 `invalid_request`, `unknown_handle`, `context_unavailable`, `source_unavailable`, `rate_limited`, `gateway_busy`).

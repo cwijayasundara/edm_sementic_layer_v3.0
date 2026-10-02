@@ -29,3 +29,10 @@ export function rows(offset: number, limit: number) {
   const all = Array.from({ length: 60 }, (_, i) => [i === 0 ? "EMEA" : `EMEA-${i}`, 60 - i]);
   return { handle: "r_aaaaaaaaaaaa", columns: ["region", "value"], offset, row_count: 60, rows: all.slice(offset, offset + limit) };
 }
+
+export const LINEAGE = { nodes: [
+  { id: "metric:open_breaks", kind: "Metric", label: "open_breaks", source: "cashrecon", detail: "Open cash breaks" },
+  { id: "source:cashrecon", kind: "Source", label: "cashrecon" },
+  { id: "table:cashrecon.breaks", kind: "Table", label: "cashrecon.breaks", source: "cashrecon" },
+], edges: [{ from: "source:cashrecon", to: "metric:open_breaks", type: "PROVIDES" },
+  { from: "metric:open_breaks", to: "table:cashrecon.breaks", type: "COMPUTED_FROM" }], truncated: false, governed: true };
