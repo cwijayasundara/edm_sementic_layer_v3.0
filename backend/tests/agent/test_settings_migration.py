@@ -43,3 +43,23 @@ def test_app_role_can_insert_and_select_agent_runs_but_not_update():
         assert c.execute("SELECT count(*) FROM app.agent_runs WHERE run_id='t-run-1'").fetchone()[0] >= 1
         with pytest.raises(psycopg.errors.InsufficientPrivilege):
             c.execute("UPDATE app.agent_runs SET status='x' WHERE run_id='t-run-1'")
+
+
+def test_saved_dashboards_is_migration_4_and_a_granted_table():
+    assert "saved_dashboards" in APP_TABLES
+    ddl = " ".join(d for v, d in MIGRATIONS if v == 4)
+    for col in ("id uuid", "sub text", "title text", "items jsonb", "created_at"):
+        assert col in ddl
+
+
+@pytest.mark.db
+def test_app_role_can_delete_saved_dashboards_but_not_update():
+    from prism.db.app_migrate import migrate_app
+    s = Settings()
+    migrate_app(s)
+    with psycopg.connect(s.app_dsn(), autocommit=True) as c:
+        c.execute("INSERT INTO app.saved_dashboards (id, sub, title, items) VALUES "
+                  "('00000000-0000-0000-0000-00000000d5d5', 'agent-test', 't', '[]')")
+        with pytest.raises(psycopg.errors.InsufficientPrivilege):
+            c.execute("UPDATE app.saved_dashboards SET title='x'")
+        c.execute("DELETE FROM app.saved_dashboards WHERE id='00000000-0000-0000-0000-00000000d5d5'")

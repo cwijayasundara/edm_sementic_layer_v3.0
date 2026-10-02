@@ -5,7 +5,8 @@ the gateway runs `migrate_app` at startup. Every step here is safe to repeat.
 
 Grants are declarative: each run first revokes everything the app role holds on the app database, its
 `app`/`public` schemas and their tables/sequences/functions (and its role memberships, both ways), then
-grants exactly CONNECT, USAGE on `app` and SELECT/INSERT on `app.audit` / `app.query_log`. A stale
+grants exactly CONNECT, USAGE on `app`, SELECT/INSERT on
+the app tables and DELETE on `app.saved_dashboards`. A stale
 UPDATE/DELETE/TRUNCATE grant or membership therefore disappears on the next run. The app role name may
 not be a reserved/source role, a superuser or a database owner (checked before anything is altered).
 
@@ -91,9 +92,20 @@ MIGRATIONS: tuple[tuple[int, str], ...] = (
         );
         CREATE INDEX IF NOT EXISTS agent_runs_sub_ts ON app.agent_runs (sub, ts DESC);
     """),
+    (4, """
+        CREATE TABLE IF NOT EXISTS app.saved_dashboards (
+          id uuid PRIMARY KEY,
+          sub text NOT NULL,
+          title text NOT NULL,
+          items jsonb NOT NULL,
+          created_at timestamptz NOT NULL DEFAULT now()
+        );
+        CREATE INDEX IF NOT EXISTS saved_dashboards_sub ON app.saved_dashboards (sub, created_at DESC);
+    """),
 )
 
-APP_TABLES = ("audit", "query_log", "agent_runs")
+APP_TABLES = ("audit", "query_log", "agent_runs", "saved_dashboards")
+DELETABLE_TABLES = ("saved_dashboards",)   # user-owned rows; everything else stays append-only
 
 
 def check_app_role_name(conn: psycopg.Connection, settings: Settings) -> None:
@@ -173,6 +185,8 @@ def _grant_statements(app_user: str) -> list[sql.Composable]:
         sql.SQL("GRANT USAGE ON SCHEMA app TO {}").format(role),
         # append-only: the gateway records and reads history, it never edits or deletes it
         sql.SQL("GRANT SELECT, INSERT ON {} TO {}").format(tables, role),
+        # saved dashboards are the user's own rows: they may delete them (never update)
+        *[sql.SQL("GRANT DELETE ON {} TO {}").format(sql.Identifier("app", t), role) for t in DELETABLE_TABLES],
     ]
 
 

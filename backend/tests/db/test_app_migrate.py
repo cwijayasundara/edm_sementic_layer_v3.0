@@ -142,7 +142,7 @@ def _app_role_rights(settings: Settings) -> dict:
             return conn.execute(query, args).fetchone()[0]
 
         tables = {}
-        for table in ("app.audit", "app.query_log", "app.agent_runs", "app.schema_migrations", "public.seed_info"):
+        for table in ("app.audit", "app.query_log", "app.agent_runs", "app.saved_dashboards", "app.schema_migrations", "public.seed_info"):
             tables[table] = {p for p in ("SELECT", "INSERT", "UPDATE", "DELETE", "TRUNCATE", "REFERENCES", "TRIGGER")
                              if one("SELECT has_table_privilege(%s, %s, %s)", role, table, p)}
         return {
@@ -164,6 +164,7 @@ def _app_role_rights(settings: Settings) -> dict:
 EXPECTED_RIGHTS = {
     "tables": {"app.audit": {"SELECT", "INSERT"}, "app.query_log": {"SELECT", "INSERT"},
                "app.agent_runs": {"SELECT", "INSERT"},
+               "app.saved_dashboards": {"SELECT", "INSERT", "DELETE"},
                "app.schema_migrations": set(), "public.seed_info": set()},
     "column_update": False, "schema_create": False, "public_create": False, "db_temp": False, "db_create": False,
     "member_of": [], "members": [],
