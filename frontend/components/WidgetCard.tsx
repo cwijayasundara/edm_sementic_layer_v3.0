@@ -1,13 +1,15 @@
 "use client";
 import dynamic from "next/dynamic";
 import { Component, useEffect, useRef, useState } from "react";
-import { Maximize2, Pin, PinOff, X } from "lucide-react";
+import { Maximize2, Network, Pin, PinOff, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { ContextGraphDialog } from "@/components/ContextGraphDialog";
 import { DataTable } from "@/components/DataTable";
 import { useSession } from "@/components/SessionProvider";
 import { ApiError, api } from "@/lib/api";
+import { EXPIRED_TEXT } from "@/lib/copy";
 import { type CanvasItem, canPin } from "@/lib/canvas";
 import { ChartError, kpiValue, toEChartsOption } from "@/lib/charts";
 import { formatValue } from "@/lib/format";
@@ -17,7 +19,7 @@ import type { ResultPage } from "@/lib/schemas";
 const Chart = dynamic(() => import("@/components/Chart").then((m) => m.Chart), { ssr: false });
 
 export const CHART_ROWS = 200;
-export const EXPIRED_TEXT = "This result has expired. Ask again or reopen the dashboard.";
+export { EXPIRED_TEXT };
 export const STATUS_TEXT = {
   not_permitted: "Not permitted for your role",
   unavailable: "Data service unavailable",
@@ -57,6 +59,7 @@ export function WidgetCard({ item, onRemove, onTogglePin, onProvenance }:
   callRef.current = call;
   const [load, setLoad] = useState<Load>({ kind: "loading" });
   const [expanded, setExpanded] = useState(false);
+  const [graphOpen, setGraphOpen] = useState(false);
   const [nonce, setNonce] = useState(0);
   const live = item.status === "ok" && item.widget.handle !== "";
 
@@ -109,7 +112,10 @@ export function WidgetCard({ item, onRemove, onTogglePin, onProvenance }:
             {source?.name ?? "Combined sources"}</span>
           {load.kind === "ok" && load.page.row_count > CHART_ROWS &&
             <span>Showing the first {CHART_ROWS} of {load.page.row_count} rows</span>}
-          <button type="button" className="ml-auto font-medium text-[var(--prism-navy)] underline-offset-4 hover:underline"
+          <button type="button" disabled={load.kind !== "ok"} onClick={() => setGraphOpen(true)}
+            className="ml-auto inline-flex items-center gap-1 font-medium text-[var(--prism-navy)] underline-offset-4 hover:underline disabled:pointer-events-none disabled:opacity-40">
+            <Network className="size-3.5" aria-hidden />Context graph</button>
+          <button type="button" className="font-medium text-[var(--prism-navy)] underline-offset-4 hover:underline"
             onClick={onProvenance}>View query · source rows</button>
         </footer>
       )}
@@ -119,6 +125,8 @@ export function WidgetCard({ item, onRemove, onTogglePin, onProvenance }:
           {live && load.kind === "ok" && <Boundary><WidgetBody item={item} page={load.page} height={520} /></Boundary>}
         </DialogContent>
       </Dialog>
+      {live && <ContextGraphDialog open={graphOpen} onOpenChange={setGraphOpen} handle={item.widget.handle}
+        title={item.widget.title} />}
     </div>
   );
 }

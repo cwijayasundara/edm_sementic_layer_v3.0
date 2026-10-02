@@ -30,6 +30,16 @@ describe("WidgetCard", () => {
     expect(results).toHaveBeenCalledWith("T", "r_aaaaaaaaaaaa", 0, 200);
   });
 
+  it("enables Context graph only once the result has loaded", async () => {
+    results.mockResolvedValueOnce({ handle: "r_aaaaaaaaaaaa", columns: ["region", "value"], offset: 0, row_count: 1,
+      rows: [["EMEA", 3]] });
+    render(<WidgetCard item={base} {...props} />);
+    const btn = screen.getByRole("button", { name: "Context graph" });
+    expect(btn).toBeDisabled();
+    await screen.findByTestId("chart");
+    expect(btn).toBeEnabled();
+  });
+
   it("shows the expired message on a 404", async () => {
     results.mockRejectedValueOnce(new ApiError(404));
     render(<WidgetCard item={base} {...props} />);
