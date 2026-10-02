@@ -27,6 +27,7 @@ SCHEMA = [
     "CREATE CONSTRAINT ctx_uid IF NOT EXISTS FOR (n:Ctx) REQUIRE n.uid IS UNIQUE",
     *(f"CREATE CONSTRAINT {name} IF NOT EXISTS FOR (n:{label}) REQUIRE ({', '.join(f'n.{p}' for p in props)}) IS UNIQUE"
       for name, label, props in NATURAL_KEYS),
+    "CREATE CONSTRAINT trace_ns_run IF NOT EXISTS FOR (t:Trace) REQUIRE (t.ns, t.run_id) IS UNIQUE",
     "CREATE INDEX ctx_ns_version IF NOT EXISTS FOR (n:Ctx) ON (n.ns, n.loaded_version)",
     # Quantization is on by default in 5.26 and distorts scores; the graph is small, so keep exact float32 vectors.
     f"""CREATE VECTOR INDEX {VECTOR_INDEX} IF NOT EXISTS FOR (n:Searchable) ON n.embedding
