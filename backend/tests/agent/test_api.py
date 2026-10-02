@@ -259,3 +259,27 @@ def test_testserver_host_is_not_allowed_in_production():
     c = app_with(FakeGateway({}), settings=PROD)
     assert c.get("/healthz").status_code == 400            # Host: testserver
     assert c.get("/healthz", headers={"Host": "localhost"}).status_code == 200
+
+
+RID = "0b8f3c1e-2d4a-4c6b-9e7f-1a2b3c4d5e6f"
+
+
+def test_confirm_answer_route_maps_gateway_outcomes():
+    gw = FakeGateway({"confirm_answer": [{"confirmed": True}, GatewayError("not_confirmable", "secret detail"),
+                                         GatewayError("rate_limited", "x"), GatewayError("confirm_failed", "x"),
+                                         GatewayError("gateway_unavailable", "x")]})
+    c = app_with(gw)
+    h = {"Authorization": f"Bearer {token()}"}
+    ok = c.post(f"/answers/{RID}/confirm", headers=h)
+    assert ok.status_code == 204 and ok.content == b""
+    assert gw.calls[-1] == ("confirm_answer", {"record_id": RID})
+    nf = c.post(f"/answers/{RID}/confirm", headers=h)
+    assert nf.status_code == 404 and nf.json() == {"detail": "not found"}
+    assert c.post(f"/answers/{RID}/confirm", headers=h).status_code == 429
+    assert c.post(f"/answers/{RID}/confirm", headers=h).status_code == 502
+    assert c.post(f"/answers/{RID}/confirm", headers=h).status_code == 502
+    calls = len(gw.calls)
+    for bad in ("nope", RID.upper(), RID + "0"):
+        assert c.post(f"/answers/{bad}/confirm", headers=h).status_code == 422
+    assert len(gw.calls) == calls                    # an invalid id never reaches the gateway
+    assert c.post(f"/answers/{RID}/confirm").status_code == 401

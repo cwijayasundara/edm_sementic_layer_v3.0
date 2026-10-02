@@ -1,5 +1,5 @@
-"""The agent's HTTP surface: SSE chat, dashboard KPIs, result paging, saved dashboards (save, list, delete, replay
-as the caller) and a dev-only token mint. Every data call is
+"""The agent's HTTP surface: SSE chat, dashboard KPIs, result paging, human confirmation of a recorded answer, saved
+dashboards (save, list, delete, replay as the caller) and a dev-only token mint. Every data call is
 made through the gateway with the caller's own token; error bodies never carry gateway or auth detail."""
 import json
 import logging
@@ -19,7 +19,7 @@ from prism.agent.dashboards import (DashboardStore, LimitReached, MemoryDashboar
 from prism.agent.gateway_client import GatewayClient, GatewayError, GatewayPort
 from prism.agent.kpis import KpiService
 from prism.agent.model import AnthropicModelClient, ModelRequest, ModelResponse
-from prism.agent.service import MAX_QUESTION_CHARS, AgentService
+from prism.agent.service import MAX_QUESTION_CHARS, RECORD_ID, AgentService
 from prism.agent.telemetry import AgentRunWriter
 from prism.config import Settings
 from prism.gateway.audit import open_audit_pool
@@ -127,6 +127,21 @@ def create_app(*, settings: Settings | None = None, service: AgentService | None
             if exc.code in ("unknown_handle", "not_permitted"):
                 raise HTTPException(404, "not found") from None
             raise HTTPException(502, "data service unavailable") from None
+
+    @app.post("/answers/{record_id}/confirm", status_code=204)
+    async def confirm_answer(record_id: str, user: UserContext = Depends(current_user)) -> Response:
+        if not RECORD_ID.match(record_id):
+            raise HTTPException(422, "invalid answer id")
+        try:
+            async with factory(user) as gateway:
+                await gateway.call("confirm_answer", {"record_id": record_id})
+        except GatewayError as exc:
+            if exc.code == "not_confirmable":
+                raise HTTPException(404, "not found") from None
+            if exc.code == "rate_limited":
+                raise HTTPException(429, "too many requests") from None
+            raise HTTPException(502, "data service unavailable") from None
+        return Response(status_code=204)
 
     async def _store(op):
         try:

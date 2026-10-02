@@ -14,8 +14,8 @@ class GatewayError(Exception):
                                 "currency_mixing", "unknown_handle", "empty_result", "result_too_large"})
     RETRY_LATER = frozenset({"rate_limited", "gateway_busy", "source_busy", "source_timeout", "source_unavailable",
                              "context_unavailable", "result_store_full", "combine_timeout", "record_failed",
-                             "gateway_unavailable"})
-    FINAL = frozenset({"not_permitted", "metrics_only"})
+                             "gateway_unavailable", "confirm_failed"})
+    FINAL = frozenset({"not_permitted", "metrics_only", "not_confirmable"})
 
     def __init__(self, code: str, message: str):
         super().__init__(f"{code}: {message[:500]}")

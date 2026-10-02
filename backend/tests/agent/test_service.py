@@ -325,3 +325,33 @@ async def test_refusal_stop_reason_answers_plainly_with_status_ok():
     events = await collect(service(FakeGateway({}), ScriptedModelClient([ModelResponse((), "refusal", Usage())]), pool))
     assert events[0] == {"type": "summary", "text": "I can't help with that request."}
     assert pool.rows[0]["status"] == "ok"
+
+
+RID = "0b8f3c1e-2d4a-4c6b-9e7f-1a2b3c4d5e6f"
+VIZ = [reply_tools(("run_metric", {"metric_id": "m"})),
+       reply_tools(("visualize", {"handles": ["r_aaaaaaaaaaaa"], "intent": "x"})),
+       reply_tools(("emit_dashboard_spec", _spec("r_aaaaaaaaaaaa"))), reply_text("ok")]
+
+
+async def test_a_recorded_answer_emits_an_answer_event_before_telemetry():
+    gw = FakeGateway({"run_metric": summary(metric_id="m"),
+                      "record_answer": {"recorded": True, "record_id": RID, "metric_backed": True}})
+    events, rec = await _answer(gw, VIZ)
+    assert [e["type"] for e in events] == ["plan", "widget", "summary", "answer", "telemetry"]
+    assert events[3] == {"type": "answer", "record_id": RID, "confirmable": True}
+    assert "verified" not in rec[0][1]
+
+
+async def test_a_not_metric_backed_record_is_not_confirmable():
+    gw = FakeGateway({"run_metric": summary(metric_id="m"),
+                      "record_answer": {"recorded": True, "record_id": RID, "metric_backed": False}})
+    events, _ = await _answer(gw, VIZ)
+    assert events[3] == {"type": "answer", "record_id": RID, "confirmable": False}
+
+
+@pytest.mark.parametrize("result", [{"recorded": True}, {"recorded": True, "record_id": "nope", "metric_backed": True},
+                                    GatewayError("record_failed", "x"), GatewayError("rate_limited", "x")])
+async def test_no_answer_event_without_a_valid_record(result):
+    gw = FakeGateway({"run_metric": summary(metric_id="m"), "record_answer": result})
+    events, _ = await _answer(gw, VIZ)
+    assert [e["type"] for e in events] == ["plan", "widget", "summary", "telemetry"]

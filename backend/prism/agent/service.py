@@ -1,8 +1,9 @@
-"""AgentService.chat: one question in, an ordered event stream out (plan* -> widget* -> summary -> telemetry, or
+"""AgentService.chat: one question in, an ordered event stream out (plan* -> widget* -> summary -> answer? -> telemetry, or
 ... -> error -> telemetry). Owns the supervisor run, the one-step model escalation, the dashboard fallback, the
 record_answer write-back and the per-run telemetry."""
 import asyncio
 import logging
+import re
 import uuid
 from collections.abc import AsyncIterator, Callable
 from contextlib import AbstractAsyncContextManager, aclosing
@@ -24,6 +25,7 @@ log = logging.getLogger("prism.agent")
 MAX_QUESTION_CHARS = 2000
 RECORDED_HANDLES = 20
 NO_ANSWER = "I could not produce an answer for that question."
+RECORD_ID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 
 
 @dataclass
@@ -93,7 +95,9 @@ class AgentService:
         run.status = "refused" if state.refusal else "ok"
         for event in self._answer_events(state, text):
             yield event
-        await self._record_answer(gateway, question, state)
+        recorded = await self._record_answer(gateway, question, state)
+        if recorded is not None:
+            yield {"type": "answer", **recorded}
 
     async def _supervise(self, user: UserContext, toolbox: ToolBox, state: RunState,
                          question: str) -> tuple[str, str | None]:
@@ -158,19 +162,25 @@ class AgentService:
         return events
 
     @staticmethod
-    async def _record_answer(gateway: GatewayPort, question: str, state: RunState) -> None:
-        """Write back only the governed-metric handles the delivered dashboard rests on (the gateway decides
-        whether `verified` is accepted)."""
+    async def _record_answer(gateway: GatewayPort, question: str, state: RunState) -> dict | None:
+        """Write back only the governed-metric handles the delivered dashboard rests on. Returns the `answer` event
+        payload ({record_id, confirmable}) when the gateway recorded it, else None: the user can confirm only an
+        answer the gateway holds, and the gateway decides whether it is metric-backed."""
         if state.spec is None or state.spec_is_fallback or state.refusal or state.error_code:
-            return
+            return None
         handles = [h for h in dict.fromkeys(w.handle for w in state.spec.widgets) if h in state.metric_handles]
         if not handles:
-            return
+            return None
         try:
-            await gateway.call("record_answer", {"question": question, "plan": "agent run",
-                                                 "handles": handles[:RECORDED_HANDLES]})
+            out = await gateway.call("record_answer", {"question": question, "plan": "agent run",
+                                                       "handles": handles[:RECORDED_HANDLES]})
         except Exception as exc:  # noqa: BLE001 - a failed write-back never fails a delivered answer
             log.warning("record_answer failed: %s", getattr(exc, "code", type(exc).__name__))
+            return None
+        record_id = out.get("record_id")
+        if not isinstance(record_id, str) or not RECORD_ID.match(record_id):
+            return None
+        return {"record_id": record_id, "confirmable": out.get("metric_backed") is True}
 
     @staticmethod
     def _path(state: RunState) -> str:
