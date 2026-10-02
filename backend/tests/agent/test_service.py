@@ -355,3 +355,82 @@ async def test_no_answer_event_without_a_valid_record(result):
     gw = FakeGateway({"run_metric": summary(metric_id="m"), "record_answer": result})
     events, _ = await _answer(gw, VIZ)
     assert [e["type"] for e in events] == ["plan", "widget", "summary", "telemetry"]
+
+
+def _metric_script():
+    return [reply_tools(("run_metric", {"metric_id": "open_breaks"})), reply_text("EMEA leads.")]
+
+
+def _metric_gw(**extra):
+    return FakeGateway({"run_metric": summary(metric_id="open_breaks"), "record_answer": {"recorded": True},
+                        "record_trace": {"recorded": True}, **extra})
+
+
+async def test_trace_is_recorded_before_telemetry():
+    gw = _metric_gw()
+    events = await collect(service(gw, ScriptedModelClient(_metric_script())))
+    names = [c[0] for c in gw.calls]
+    assert names.index("record_trace") > names.index("run_metric")
+    assert events[-1]["type"] == "telemetry"
+    args = dict(gw.calls)["record_trace"]
+    assert args["run_id"] == events[-1]["run_id"] and args["status"] == "ok"
+    assert [s["kind"] for s in args["steps"]][-1] == "answer"
+    assert args["steps"][-1]["status"] == "ok"
+    assert args["question"] and "sub" not in args
+
+
+async def test_failed_run_records_an_error_step():
+    def boom(req):
+        raise ModelError("nope", retryable=False)
+
+    gw = FakeGateway({"record_trace": {"recorded": True}})
+    events = await collect(service(gw, ScriptedModelClient([boom])))
+    assert [e["type"] for e in events] == ["error", "telemetry"]
+    args = dict(gw.calls)["record_trace"]
+    assert args["status"] == "error" and args["steps"][-1]["kind"] == "error"
+    assert args["steps"][-1]["status"] == "error"
+
+
+async def test_refusal_records_a_refusal_step():
+    gw = FakeGateway({"run_metric": GatewayError("not_permitted", "no"), "record_trace": {"recorded": True}})
+    client = ScriptedModelClient([reply_tools(("run_metric", {"metric_id": "x"})), reply_text("No access.")])
+    await collect(service(gw, client))
+    args = dict(gw.calls)["record_trace"]
+    assert args["status"] == "refused" and args["steps"][-1]["kind"] == "refusal"
+    assert args["steps"][-1]["status"] == "refusal"
+
+
+async def test_trace_write_failure_never_changes_the_answer(caplog):
+    gw = _metric_gw(record_trace=GatewayError("context_unavailable", "down"))
+    with caplog.at_level("WARNING", logger="prism.agent"):
+        events = await collect(service(gw, ScriptedModelClient(_metric_script())))
+    types = [e["type"] for e in events]
+    assert types[-1] == "telemetry" and "summary" in types
+    assert "trace_write_failed" in caplog.text and "down" not in caplog.text
+
+
+async def test_old_style_gateway_without_record_trace_still_completes(caplog):
+    gw = FakeGateway({"run_metric": summary(metric_id="open_breaks"), "record_answer": {"recorded": True}})
+    with caplog.at_level("WARNING", logger="prism.agent"):
+        events = await collect(service(gw, ScriptedModelClient(_metric_script())))
+    assert events[-1]["type"] == "telemetry" and "trace_write_failed" in caplog.text
+
+
+async def test_more_than_forty_steps_send_the_first_39_and_the_outcome_step():
+    from prism.agent.state import RunState, UsageMeter
+    gw = FakeGateway({"record_trace": {"recorded": True}})
+    state = RunState(run_id="a" * 32, sub="s", question="q", meter=UsageMeter())
+    for i in range(50):
+        state.add_step(kind="tool", label=f"t{i}")
+    await service(gw, ScriptedModelClient([]))._record_trace(gw, state, "ok", "done")
+    steps = dict(gw.calls)["record_trace"]["steps"]
+    assert len(steps) == 40 and steps[38]["label"] == "t38" and steps[-1]["kind"] == "answer"
+
+
+async def test_retry_clears_pending_note_but_keeps_steps():
+    from prism.agent.state import RunState, UsageMeter
+    state = RunState(run_id="a" * 32, sub="s", question="q", meter=UsageMeter())
+    state.add_step(kind="tool", label="x")
+    state.pending_note = "stale"
+    AgentService._reset_for_retry(state)
+    assert state.pending_note is None and len(state.steps) == 1

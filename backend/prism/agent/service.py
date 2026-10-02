@@ -25,6 +25,8 @@ log = logging.getLogger("prism.agent")
 MAX_QUESTION_CHARS = 2000
 RECORDED_HANDLES = 20
 NO_ANSWER = "I could not produce an answer for that question."
+RUN_ID = re.compile(r"^[0-9a-f]{32}$")
+MAX_TRACE_STEPS = 40
 RECORD_ID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 
 
@@ -87,14 +89,19 @@ class AgentService:
             state.error_code = failure
             run.status = "limit" if failure == "run_limit" else "error"
             yield self._error(failure, FAILURE_MESSAGES[failure])
+            await self._record_trace(gateway, state, run.status, FAILURE_MESSAGES[failure])
             return
         if state.error_code == "gateway_unavailable" and not state.handles:
             run.status = "error"
             yield self._error("gateway_unavailable", FAILURE_MESSAGES["gateway_unavailable"])
+            await self._record_trace(gateway, state, run.status, FAILURE_MESSAGES["gateway_unavailable"])
             return
         run.status = "refused" if state.refusal else "ok"
-        for event in self._answer_events(state, text):
+        events = self._answer_events(state, text)
+        for event in events:
             yield event
+        summary_text = next((e["text"] for e in reversed(events) if e["type"] == "summary"), "")
+        await self._record_trace(gateway, state, run.status, summary_text)
         recorded = await self._record_answer(gateway, question, state)
         if recorded is not None:
             yield {"type": "answer", **recorded}
@@ -141,6 +148,23 @@ class AgentService:
         state.refusal = state.error_code = None
         state.delegated = False
         state.metric_handles, state.last_handle = set(), None
+        state.pending_note = None   # steps stay: the trace shows both attempts
+
+    async def _record_trace(self, gateway: GatewayPort, state: RunState, status: str, text: str) -> None:
+        """Best effort, before telemetry; never raises and never changes the answer."""
+        kind = "error" if status in ("error", "limit") else "refusal" if status == "refused" else "answer"
+        label = {"answer": "Answered", "refusal": "Declined", "error": "Stopped with an error"}[kind]
+        state.add_step(kind=kind, label=label, status="ok" if kind == "answer" else kind,
+                       error_code=state.error_code)
+        # over the cap: keep the first 39 steps and the outcome step, never drop the outcome
+        steps = state.steps if len(state.steps) <= MAX_TRACE_STEPS else \
+            [*state.steps[:MAX_TRACE_STEPS - 1], state.steps[-1]]
+        try:
+            await gateway.call("record_trace", {
+                "run_id": state.run_id, "question": state.question, "answer": (text or "")[:2000],
+                "path": self._path(state), "status": status, "steps": steps})
+        except Exception as exc:  # noqa: BLE001 - the trace is a side record
+            log.warning("trace_write_failed: %s", getattr(exc, "code", type(exc).__name__))
 
     @staticmethod
     def _answer_events(state: RunState, text: str) -> list[dict]:

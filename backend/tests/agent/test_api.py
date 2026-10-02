@@ -303,3 +303,34 @@ def test_lineage_passthrough_and_error_mapping():
         r = app_with(FakeGateway({"lineage": GatewayError(code, "secret detail")})).get(
             "/lineage/r_bbbbbbbbbbbb", headers=h)
         assert (r.status_code, r.json()) == (status, {"detail": detail})
+
+
+TRACE = {"run_id": "a" * 32, "question": "q", "answer": "a", "path": "metric", "status": "ok", "confirmed": False,
+         "created_at": 1, "steps": []}
+
+
+def test_trace_passthrough_and_error_mapping():
+    h = {"Authorization": f"Bearer {token()}"}
+    gw = FakeGateway({"get_trace": TRACE})
+    c = app_with(gw)
+    assert c.get(f"/runs/{'a' * 32}/trace", headers=h).json() == TRACE
+    assert gw.calls == [("get_trace", {"run_id": "a" * 32})]
+    assert c.get("/runs/nope/trace", headers=h).status_code == 404 and len(gw.calls) == 1
+    assert c.get(f"/runs/{'a' * 32}/trace").status_code == 401
+    for code, status in (("unknown_trace", 404), ("rate_limited", 429), ("context_unavailable", 502)):
+        r = app_with(FakeGateway({"get_trace": GatewayError(code, "secret")})).get(f"/runs/{'a' * 32}/trace",
+                                                                                   headers=h)
+        assert r.status_code == status and "secret" not in r.text
+
+
+def test_confirm_with_run_id_marks_the_trace_and_ignores_its_failure():
+    h = {"Authorization": f"Bearer {token()}"}
+    rid = "11111111-1111-4111-8111-111111111111"
+    gw = FakeGateway({"confirm_answer": {"confirmed": True},
+                      "mark_trace_confirmed": GatewayError("unknown_trace", "x")})
+    r = app_with(gw).post(f"/answers/{rid}/confirm?run_id={'a' * 32}", headers=h)
+    assert r.status_code == 204
+    assert [c[0] for c in gw.calls] == ["confirm_answer", "mark_trace_confirmed"]
+    gw2 = FakeGateway({"confirm_answer": {"confirmed": True}})
+    assert app_with(gw2).post(f"/answers/{rid}/confirm?run_id=bad", headers=h).status_code == 204
+    assert [c[0] for c in gw2.calls] == ["confirm_answer"]

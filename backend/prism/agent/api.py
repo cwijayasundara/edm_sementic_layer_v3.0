@@ -19,7 +19,7 @@ from prism.agent.dashboards import (DashboardStore, LimitReached, MemoryDashboar
 from prism.agent.gateway_client import GatewayClient, GatewayError, GatewayPort
 from prism.agent.kpis import KpiService
 from prism.agent.model import AnthropicModelClient, ModelRequest, ModelResponse
-from prism.agent.service import MAX_QUESTION_CHARS, RECORD_ID, AgentService
+from prism.agent.service import MAX_QUESTION_CHARS, RECORD_ID, RUN_ID, AgentService
 from prism.agent.telemetry import AgentRunWriter
 from prism.config import Settings
 from prism.gateway.audit import open_audit_pool
@@ -142,13 +142,33 @@ def create_app(*, settings: Settings | None = None, service: AgentService | None
                 raise HTTPException(429, "too many requests") from None
             raise HTTPException(502, "data service unavailable") from None
 
+    @app.get("/runs/{run_id}/trace")
+    async def run_trace(run_id: str, user: UserContext = Depends(current_user)) -> dict:
+        if not RUN_ID.match(run_id):
+            raise HTTPException(404, "not found")
+        try:
+            async with factory(user) as gateway:
+                return await gateway.call("get_trace", {"run_id": run_id})
+        except GatewayError as exc:
+            if exc.code in ("unknown_trace", "not_permitted"):
+                raise HTTPException(404, "not found") from None
+            if exc.code == "rate_limited":
+                raise HTTPException(429, "too many requests") from None
+            raise HTTPException(502, "data service unavailable") from None
+
     @app.post("/answers/{record_id}/confirm", status_code=204)
-    async def confirm_answer(record_id: str, user: UserContext = Depends(current_user)) -> Response:
+    async def confirm_answer(record_id: str, run_id: str | None = Query(None),
+                             user: UserContext = Depends(current_user)) -> Response:
         if not RECORD_ID.match(record_id):
             raise HTTPException(422, "invalid answer id")
         try:
             async with factory(user) as gateway:
                 await gateway.call("confirm_answer", {"record_id": record_id})
+                if run_id and RUN_ID.match(run_id):
+                    try:
+                        await gateway.call("mark_trace_confirmed", {"run_id": run_id})
+                    except GatewayError:
+                        pass   # the trace flag is a side record; the confirmation stands
         except GatewayError as exc:
             if exc.code == "not_confirmable":
                 raise HTTPException(404, "not found") from None
