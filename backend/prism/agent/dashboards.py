@@ -7,8 +7,9 @@ from typing import Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from prism.agent.recipes import parse_recipe
-from prism.agent.spec import Widget
+from prism.agent.gateway_client import GatewayError, GatewayPort
+from prism.agent.recipes import ReplayError, Replayer, parse_recipe
+from prism.agent.spec import Encoding, Widget
 
 MAX_DASHBOARDS = 20
 MAX_ITEMS = 8
@@ -131,3 +132,32 @@ class PgDashboardStore:
         async with self._pool.connection(timeout=self._timeout) as conn:
             cur = await conn.execute("DELETE FROM app.saved_dashboards WHERE id = %s AND sub = %s", (key, sub))
             return cur.rowcount == 1
+
+
+def _fits(widget: Widget, columns: list[str]) -> bool:
+    used = [getattr(widget.encoding, f) for f in ("x", "y", "series", "value")]
+    return all(c is None or c in columns for c in used)
+
+
+async def run_dashboard(dashboard: dict, gateway: GatewayPort) -> dict:
+    """Replay every item as the caller. A widget whose columns no longer exist falls back to a table over the same
+    fresh handle. Raises gateway_unavailable when nothing could be run at all."""
+    replayer = Replayer(gateway)
+    widgets = []
+    for item in dashboard["items"]:
+        widget = Widget.model_validate(item["widget"])
+        try:
+            s = await replayer.run(item["recipe"])
+        except ReplayError as exc:
+            widgets.append({"widget": widget.model_copy(update={"handle": ""}).model_dump(), "status": exc.status})
+            continue
+        fresh = widget.model_copy(update={"handle": s["handle"]})
+        if not _fits(fresh, s["columns"]):
+            fresh = fresh.model_copy(update={"type": "table", "encoding": Encoding()})
+        widgets.append({"widget": fresh.model_dump(), "status": "ok",
+                        "handle_info": {"columns": s["columns"], "row_count": s.get("row_count", 0),
+                                        "source": s.get("source"), "metric_id": s.get("metric_id"),
+                                        "recipe": item["recipe"]}})
+    if widgets and all(w["status"] == "unavailable" for w in widgets):
+        raise GatewayError("gateway_unavailable", "the data gateway is not reachable")
+    return {"id": dashboard["id"], "title": dashboard["title"], "widgets": widgets}

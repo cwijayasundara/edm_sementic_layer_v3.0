@@ -1,4 +1,5 @@
-"""The agent's HTTP surface: SSE chat, dashboard KPIs, result paging and a dev-only token mint. Every data call is
+"""The agent's HTTP surface: SSE chat, dashboard KPIs, result paging, saved dashboards (save, list, delete, replay
+as the caller) and a dev-only token mint. Every data call is
 made through the gateway with the caller's own token; error bodies never carry gateway or auth detail."""
 import json
 import logging
@@ -6,13 +7,15 @@ import re
 from collections.abc import AsyncIterator, Callable
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 from pydantic import BaseModel, ConfigDict, Field
 
 from prism.agent.auth import AuthError, UserContext, verify_user
+from prism.agent.dashboards import (DashboardStore, LimitReached, MemoryDashboardStore, PgDashboardStore,
+                                    SaveDashboard, run_dashboard)
 from prism.agent.gateway_client import GatewayClient, GatewayError, GatewayPort
 from prism.agent.kpis import KpiService
 from prism.agent.model import AnthropicModelClient, ModelRequest, ModelResponse
@@ -57,13 +60,15 @@ async def _sse(events: AsyncIterator[dict]) -> AsyncIterator[str]:
 
 def create_app(*, settings: Settings | None = None, service: AgentService | None = None,
                gateway_factory: GatewayFactory | None = None, kpi_service: KpiService | None = None,
-               model_configured: bool = True, lifespan=None) -> FastAPI:
+               model_configured: bool = True, lifespan=None,
+               dashboard_store: DashboardStore | None = None) -> FastAPI:
     settings = settings or Settings()
     factory: GatewayFactory = gateway_factory or (lambda user: GatewayClient(settings.gateway_url, user.token))
     kpis = kpi_service or KpiService()
     app = FastAPI(title="Prism agent", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
     app.state.service = service
-    app.add_middleware(CORSMiddleware, allow_origins=[UI_ORIGIN], allow_methods=["GET", "POST"],
+    app.state.dashboards = dashboard_store or MemoryDashboardStore()
+    app.add_middleware(CORSMiddleware, allow_origins=[UI_ORIGIN], allow_methods=["GET", "POST", "DELETE"],
                        allow_headers=["Authorization", "Content-Type"])
     # outermost; Starlette's TestClient sends Host: testserver, so that name is allowed outside production only
     app.add_middleware(TrustedHostMiddleware,
@@ -123,6 +128,48 @@ def create_app(*, settings: Settings | None = None, service: AgentService | None
                 raise HTTPException(404, "not found") from None
             raise HTTPException(502, "data service unavailable") from None
 
+    async def _store(op):
+        try:
+            return await op
+        except LimitReached:
+            raise
+        except Exception as exc:  # noqa: BLE001 - never echo database detail
+            log.error("dashboard store failed: %s", type(exc).__name__)
+            raise HTTPException(503, "dashboards unavailable") from None
+
+    @app.get("/dashboards")
+    async def list_dashboards(request: Request, user: UserContext = Depends(current_user)) -> dict:
+        return {"dashboards": await _store(request.app.state.dashboards.list(user.sub))}
+
+    @app.post("/dashboards", status_code=201)
+    async def save_dashboard(request: Request, user: UserContext = Depends(current_user)) -> dict:
+        try:
+            body = SaveDashboard.model_validate(await request.json())
+        except (ValueError, TypeError):   # pydantic ValidationError and JSON decode errors are ValueErrors
+            raise HTTPException(422, "invalid dashboard") from None
+        try:
+            return {"id": await _store(request.app.state.dashboards.create(user.sub, body))}
+        except LimitReached:
+            raise HTTPException(409, "dashboard limit reached") from None
+
+    @app.delete("/dashboards/{dashboard_id}", status_code=204)
+    async def delete_dashboard(dashboard_id: str, request: Request,
+                               user: UserContext = Depends(current_user)) -> Response:
+        if not await _store(request.app.state.dashboards.delete(user.sub, dashboard_id)):
+            raise HTTPException(404, "not found")
+        return Response(status_code=204)
+
+    @app.post("/dashboards/{dashboard_id}/run")
+    async def run_saved(dashboard_id: str, request: Request, user: UserContext = Depends(current_user)) -> dict:
+        dashboard = await _store(request.app.state.dashboards.get(user.sub, dashboard_id))
+        if dashboard is None:
+            raise HTTPException(404, "not found")
+        try:
+            async with factory(user) as gateway:
+                return await run_dashboard(dashboard, gateway)
+        except GatewayError:
+            raise HTTPException(502, "data service unavailable") from None
+
     return app
 
 
@@ -148,6 +195,7 @@ def create_app_from_env() -> FastAPI:
     async def lifespan(app: FastAPI):
         pool = await open_audit_pool(settings)
         try:
+            app.state.dashboards = PgDashboardStore(pool)
             app.state.service = AgentService(
                 settings=settings, model_client=_LazyModelClient(key),
                 gateway_factory=lambda user: GatewayClient(settings.gateway_url, user.token),
