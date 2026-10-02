@@ -11,7 +11,7 @@ export type Turn = {
   plan: PlanEvent[];
   widgetKeys: string[];
   summary?: string;
-  answer?: { recordId: string; confirmable: boolean; state: ConfirmState };
+  answer?: { recordId: string; confirmable: boolean; runId?: string; state: ConfirmState };
   telemetry?: TelemetryEvent;
   error?: string;
 };
@@ -31,7 +31,7 @@ function applyEvent(t: Turn, e: ChatEvent): Turn {
     case "plan": return { ...t, plan: [...t.plan, e] };
     case "widget": return { ...t, widgetKeys: [...t.widgetKeys, widgetKey(t.id, e.widget.id)] };
     case "summary": return { ...t, summary: e.text };
-    case "answer": return { ...t, answer: { recordId: e.record_id, confirmable: e.confirmable, state: "idle" } };
+    case "answer": return { ...t, answer: { recordId: e.record_id, confirmable: e.confirmable, runId: e.run_id, state: "idle" } };
     case "error": return { ...t, status: "error", error: e.message };
     case "telemetry": return { ...t, telemetry: e, status: t.status === "streaming" ? "done" : t.status };
   }

@@ -2,8 +2,11 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("next/dynamic", () => ({ default: () => (p: { onSelect: (id: string) => void }) =>
-  <button type="button" data-testid="graph" onClick={() => p.onSelect("metric:open_breaks")}>graph</button> }));
+const seen = vi.hoisted(() => [] as unknown[]);
+vi.mock("next/dynamic", () => ({ default: () => (p: { onSelect: (id: string) => void; highlight?: Set<string> }) => {
+  seen.push(p.highlight);
+  return <button type="button" data-testid="graph" onClick={() => p.onSelect("metric:open_breaks")}>graph</button>;
+} }));
 const lineage = vi.hoisted(() => vi.fn());
 const trace = vi.hoisted(() => vi.fn());
 vi.mock("@/components/SessionProvider", () => ({ useSession: () => ({ call: (fn: (t: string) => unknown) => fn("T") }) }));
@@ -29,7 +32,7 @@ const T_MIN = Trace.parse({ run_id: "a".repeat(32), question: "q", answer: "A.",
       error_code: null, tool: null, args: null, handle: null, rows: null, truncated: null, touched: [] },
   ] });
 
-beforeEach(() => { lineage.mockReset(); trace.mockReset(); });
+beforeEach(() => { lineage.mockReset(); trace.mockReset(); seen.length = 0; });
 
 describe("ContextGraphDialog", () => {
   it("loads the lineage of the handle and lists nodes by kind", async () => {
@@ -116,5 +119,20 @@ describe("ContextGraphDialog", () => {
     await userEvent.click(await screen.findByRole("button", { name: "open_breaks" }));
     expect(screen.getByRole("tab", { name: "Graph" })).toHaveAttribute("aria-selected", "true");
     expect(await screen.findByText("Open cash breaks")).toBeInTheDocument();
+  });
+
+  it("passes the graph the same highlight set across a node selection", async () => {
+    lineage.mockResolvedValue(G);
+    trace.mockResolvedValueOnce(T_MIN);
+    render(<ContextGraphDialog open onOpenChange={vi.fn()} title="q" handle="r_aaaaaaaaaaaa" runId={"a".repeat(32)}
+      initialTab="graph" />);
+    const g = await screen.findByTestId("graph");
+    await vi.waitFor(() => expect(seen.at(-1)).toBeInstanceOf(Set));
+    const before = seen.at(-1);
+    const renders = seen.length;
+    await userEvent.click(g);
+    expect(await screen.findByText("Open cash breaks")).toBeInTheDocument();
+    expect(seen.length).toBeGreaterThan(renders);
+    expect(seen.at(-1)).toBe(before);
   });
 });

@@ -122,7 +122,7 @@ export function AssistantPanel({ onWidget, onRun, onExplain, examples = [] }: {
     if (!a?.confirmable || a.state === "sending" || a.state === "confirmed") return;
     dispatch({ type: "confirm", id: turn.id, state: "sending" });
     try {
-      await call((token) => api.confirm(token, a.recordId, turn.telemetry?.run_id));
+      await call((token) => api.confirm(token, a.recordId, a.runId ?? turn.telemetry?.run_id));
       dispatch({ type: "confirm", id: turn.id, state: "confirmed" });
     } catch (e) {
       if (!(e instanceof Unauthorized)) dispatch({ type: "confirm", id: turn.id, state: "failed" });

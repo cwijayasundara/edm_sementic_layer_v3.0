@@ -1,7 +1,7 @@
 "use client";
 import { Network, RotateCcw } from "lucide-react";
 import dynamic from "next/dynamic";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -43,6 +43,8 @@ export function ContextGraphDialog({ open, onOpenChange, handle, title, runId, i
   const [traceNonce, setTraceNonce] = useState(0);
   const [layout, setLayout] = useState(0);
   const [selected, setSelected] = useState<string | null>(null);
+  // stable identity: a new Set each render would make the graph re-apply its option and restart the layout
+  const highlight = useMemo(() => (traceLoad.kind === "ok" ? touchedIds(traceLoad.trace) : undefined), [traceLoad]);
 
   useEffect(() => { if (open) setTab(startRef.current); }, [open]);
 
@@ -93,7 +95,7 @@ export function ContextGraphDialog({ open, onOpenChange, handle, title, runId, i
         {tab === "graph" && handle && (
           <div role="tabpanel" id="cg-panel-graph" aria-labelledby="cg-tab-graph">
             <Body load={load} layout={layout} selected={selected} onSelect={setSelected}
-              highlight={traceLoad.kind === "ok" ? touchedIds(traceLoad.trace) : undefined}
+              highlight={highlight}
               onRetry={() => setNonce((n) => n + 1)} onReset={() => { setLayout((n) => n + 1); setSelected(null); }} />
           </div>)}
         {tab === "reasoning" && (

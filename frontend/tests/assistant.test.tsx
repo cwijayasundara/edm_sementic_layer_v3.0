@@ -200,4 +200,17 @@ describe("confirming an answer", () => {
     await askWithAnswer(false);
     expect(screen.queryByRole("button", { name: "Confirm this answer" })).not.toBeInTheDocument();
   });
+
+  it("confirms with the run id carried by the answer event, even before telemetry", async () => {
+    chat.mockImplementation(async function* () {
+      yield { type: "summary", text: "Done." };
+      yield { type: "answer", record_id: RID, confirmable: true, run_id: "c".repeat(32) };
+    });
+    confirm.mockResolvedValue(undefined);
+    render(<AssistantPanel onWidget={vi.fn()} />);
+    await userEvent.type(screen.getByRole("textbox", { name: "Question" }), "q");
+    await userEvent.click(screen.getByRole("button", { name: "Ask" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Confirm this answer" }));
+    expect(confirm).toHaveBeenCalledWith("T", RID, "c".repeat(32));
+  });
 });

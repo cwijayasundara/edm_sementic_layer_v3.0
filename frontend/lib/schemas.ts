@@ -49,7 +49,7 @@ export const TelemetryEvent = z.object({
   tool_calls: z.number(), tool_latency_ms: z.number(), cost_usd: z.number(),
 });
 export const ErrorEvent = z.object({ type: z.literal("error"), code: z.string(), message: z.string() });
-export const AnswerEvent = z.object({ type: z.literal("answer"), record_id: z.string().uuid(), confirmable: z.boolean() });
+export const AnswerEvent = z.object({ type: z.literal("answer"), record_id: z.string().uuid(), confirmable: z.boolean(), run_id: z.string().optional() });
 export const ChatEvent = z.discriminatedUnion("type", [PlanEvent, WidgetEvent, SummaryEvent, AnswerEvent, TelemetryEvent, ErrorEvent]);
 export type PlanEvent = z.infer<typeof PlanEvent>;
 export type WidgetEvent = z.infer<typeof WidgetEvent>;
