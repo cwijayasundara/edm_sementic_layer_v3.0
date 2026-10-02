@@ -47,6 +47,7 @@ class HandleInfo:
     metric_id: str | None
     row_count: int = 0
     sample_rows: tuple = ()
+    recipe: dict | None = None   # how the handle was produced (prism.agent.recipes); None when it cannot be replayed
 
 
 def validate_spec(spec: DashboardSpec, handles: dict[str, HandleInfo]) -> list[str]:

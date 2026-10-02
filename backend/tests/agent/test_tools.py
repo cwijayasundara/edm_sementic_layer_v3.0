@@ -282,3 +282,34 @@ async def test_a_context_pack_near_its_budget_reaches_the_model_intact():
                          tools=(ToolDef("search_context", "d", {"type": "object", "properties": {}}),),
                          handler=handler, limits=RunLimits(3, 3, 5), meter=UsageMeter()).run("q")
     assert client.requests[1].messages[-1].content[0].content == out.content   # not truncated at 12,000
+
+
+async def test_run_metric_records_its_recipe_with_defaults_filled():
+    gw = FakeGateway({"run_metric": summary(metric_id="open_breaks")})
+    tb, state = box(gw)
+    await tb.supervisor_handler("run_metric", {"metric_id": "open_breaks", "dimensions": ["region"]})
+    assert state.handles["r_aaaaaaaaaaaa"].recipe == {
+        "tool": "run_metric",
+        "args": {"metric_id": "open_breaks", "dimensions": ["region"], "filters": {}, "limit": None}}
+
+
+async def test_query_source_recipe_is_a_copy_of_the_request():
+    request = {"sql": "SELECT 1"}
+    gw = FakeGateway({"query_source": summary()})
+    tb, state = box(gw)
+    await tb.supervisor_handler("query_source", {"source": "cashrecon", "request": request})
+    request["sql"] = "changed"
+    assert state.handles["r_aaaaaaaaaaaa"].recipe == {
+        "tool": "query_source", "args": {"source": "cashrecon", "request": {"sql": "SELECT 1"}}}
+
+
+async def test_combine_recipe_nests_its_inputs_and_is_none_when_an_input_is_unknown():
+    gw = FakeGateway({"run_metric": summary("r_111111111111", metric_id="open_breaks"),
+                      "combine": [summary("r_222222222222"), summary("r_333333333333")]})
+    tb, state = box(gw)
+    await tb.supervisor_handler("run_metric", {"metric_id": "open_breaks"})
+    await tb.supervisor_handler("combine", {"sql": "SELECT * FROM a", "handles": {"a": "r_111111111111"}})
+    assert state.handles["r_222222222222"].recipe == {
+        "tool": "combine", "args": {"sql": "SELECT * FROM a", "inputs": {"a": state.handles["r_111111111111"].recipe}}}
+    await tb.supervisor_handler("combine", {"sql": "SELECT * FROM b", "handles": {"b": "r_999999999999"}})
+    assert state.handles["r_333333333333"].recipe is None

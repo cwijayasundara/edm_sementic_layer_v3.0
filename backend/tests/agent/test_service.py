@@ -45,6 +45,7 @@ async def test_fast_path_metric_question_streams_plan_widget_summary_telemetry()
     assert types == ["plan", "widget", "summary", "telemetry"]
     assert events[2]["text"] == "EMEA has the most open breaks."   # the supervisor's text, not the spec narrative
     assert events[1]["widget"]["type"] == "bar"
+    assert events[1]["handle_info"]["recipe"]["tool"] == "run_metric"
     assert events[3]["path"] == "metric" and events[3]["llm_turns"] >= 4
     assert ("record_answer", {"question": "How many open breaks by region?", "plan": "agent run",
                               "handles": ["r_aaaaaaaaaaaa"], "verified": True}) in gw.calls

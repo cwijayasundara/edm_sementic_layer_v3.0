@@ -150,7 +150,8 @@ class AgentService:
             info = state.handles[widget.handle]
             events.append({"type": "widget", "widget": widget.model_dump(),
                            "handle_info": {"columns": info.columns, "row_count": info.row_count,
-                                           "source": info.source, "metric_id": info.metric_id}})
+                                           "source": info.source, "metric_id": info.metric_id,
+                                           "recipe": info.recipe}})
         # the supervisor's text saw the sample rows; the spec narrative (written from columns only) is the backup
         summary = text or (state.spec.narrative if not state.spec_is_fallback else "") or NO_ANSWER
         events.append({"type": "summary", "text": summary})

@@ -1,6 +1,7 @@
 """Tool handlers: validate model-supplied arguments against the tool schema, call the gateway (identity is the
 transport's bearer token, never an argument), record result handles, and shape errors for the model."""
 import asyncio
+import copy
 import json
 import logging
 from collections.abc import Awaitable, Callable
@@ -84,7 +85,7 @@ class ToolBox:
         handle, s = out["handle"], out["summary"]
         self._state.handles[handle] = HandleInfo(
             handle, s["columns"], s.get("source"), s.get("metric_id"), row_count=s.get("row_count", 0),
-            sample_rows=tuple(tuple(r) for r in s.get("sample_rows", ())))
+            sample_rows=tuple(tuple(r) for r in s.get("sample_rows", ())), recipe=self._recipe(name, args))
         self._state.last_handle = handle
         if name == "run_metric":
             self._state.metric_handles.add(handle)
@@ -92,6 +93,25 @@ class ToolBox:
             created.append(handle)
         self._state.emit("plan", tool=name, label=_handle_label(name, args))
         return ToolOutcome(json.dumps({"handle": handle, "summary": s}))
+
+    def _recipe(self, name: str, args: dict) -> dict | None:
+        """The call that produced a handle, for provenance and saved-dashboard replay. A combine nests its inputs'
+        recipes and has none when any input handle has none."""
+        if name == "run_metric":
+            return {"tool": name, "args": {"metric_id": args.get("metric_id"),
+                                           "dimensions": list(args.get("dimensions") or []),
+                                           "filters": copy.deepcopy(args.get("filters") or {}),
+                                           "limit": args.get("limit")}}
+        if name == "query_source":
+            return {"tool": name, "args": {"source": args.get("source"),
+                                           "request": copy.deepcopy(args.get("request") or {})}}
+        inputs = {}
+        for table, h in (args.get("handles") or {}).items():
+            info = self._state.handles.get(h)
+            if info is None or info.recipe is None:
+                return None
+            inputs[table] = info.recipe
+        return {"tool": "combine", "args": {"sql": args.get("sql"), "inputs": inputs}}
 
     async def _call_with_retry(self, name: str, args: dict) -> dict:
         try:
