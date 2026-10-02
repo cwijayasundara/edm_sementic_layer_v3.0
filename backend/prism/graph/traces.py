@@ -111,7 +111,7 @@ def _shape(rows: list[dict]) -> dict | None:
 
 
 def _write_params(trace: dict, claims: dict, ns, now: int, retention_s: int) -> dict:
-    return {"run_id": trace["run_id"], "sub": trace["sub"], "question": trace.get("question"),
+    return {"run_id": trace["run_id"], "sub": claims.get("sub"), "question": trace.get("question"),
             "answer": trace.get("answer"), "path": trace.get("path"), "status": trace.get("status"),
             "answered": list(trace.get("answered") or []), "steps": list(trace.get("steps") or []), "now": now,
             "expires_at": now + retention_s, **_gate(claims, ns)}

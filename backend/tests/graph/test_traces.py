@@ -1,10 +1,14 @@
 """Trace storage: owner-bound, re-gated on read, outside the catalog. Neo4j session graph in ns `prism_test`."""
 import pytest
+from neo4j import AsyncGraphDatabase
+
+from prism.config import Settings
 
 from prism.graph.catalog import load_catalog
 from prism.graph.lineage import lineage
 from prism.graph.retrieval import context_pack
-from prism.graph.traces import TraceOwned, get_trace, mark_confirmed, record_trace
+from prism.graph.traces import (TraceOwned, aget_trace, amark_confirmed, arecord_trace, get_trace, mark_confirmed,
+                                record_trace)
 from prism.security.personas import claims_for
 from tests.graph_ns import TEST_GRAPH_NS, load_test_graph
 
@@ -86,6 +90,23 @@ def test_links_only_to_visible_catalog_nodes(db):
     put(db, t, who="cash_ops_emea")
     touched = {x["id"] for x in get(db, who="cash_ops_emea")["steps"][1]["touched"]}
     assert touched == {"metric:open_breaks"}   # marketmaster is out of scope; unknown ids link nothing
+    stored = db.execute_query("MATCH (:TraceStep {ns: $ns})-[:TOUCHED]->(n) RETURN collect(n.local_uid) AS u",
+                              ns=TEST_GRAPH_NS).records[0]["u"]
+    assert stored == ["metric:open_breaks"]    # the write-side gate, not just the read re-gate
+
+
+def answered_with(db):
+    return db.execute_query("MATCH (:Trace {ns: $ns})-[:ANSWERED_WITH]->(n) RETURN collect(n.local_uid) AS u",
+                            ns=TEST_GRAPH_NS).records[0]["u"]
+
+
+@pytest.mark.neo4j
+def test_answered_with_links_only_visible_metrics(db):
+    put(db, trace(sub="cash_ops_emea", answered=["metric:price_conflicts", "metric:no_such_metric"]),
+        who="cash_ops_emea")
+    assert answered_with(db) == []
+    put(db, trace(sub="cash_ops_emea", answered=["metric:price_conflicts", "metric:open_breaks"]), who="cash_ops_emea")
+    assert answered_with(db) == ["metric:open_breaks"]
 
 
 @pytest.mark.neo4j
@@ -103,6 +124,40 @@ def test_expired_traces_of_the_caller_are_deleted_on_write(db):
     assert left.records[0]["ids"] == ["c" * 32]
     assert db.execute_query("MATCH (n:TraceStep {ns: $ns}) RETURN count(n) AS c",
                             ns=TEST_GRAPH_NS).records[0]["c"] == 3
+
+
+@pytest.mark.neo4j
+def test_purge_touches_only_the_callers_expired_or_replaced_traces(db):
+    put(db, trace(run_id="d" * 32, sub="head_data"), who="head_data", now=NOW - 8 * DAY)   # someone else's, expired
+    put(db, trace(run_id="e" * 32))                                                          # mine, unexpired
+    put(db, trace(run_id="f" * 32), now=NOW - 8 * DAY)                                       # mine, expired
+    put(db, trace(run_id="c" * 32))                                                          # the write that purges
+    ids = db.execute_query("MATCH (t:Trace {ns: $ns}) RETURN collect(t.run_id) AS ids", ns=TEST_GRAPH_NS)
+    assert sorted(ids.records[0]["ids"]) == sorted(["d" * 32, "e" * 32, "c" * 32])
+
+
+@pytest.mark.neo4j
+def test_sub_comes_from_the_claims_not_the_payload(db):
+    put(db, trace(sub="head_data"), who="steward")
+    assert get(db) is not None
+    assert get(db, who="head_data") is None
+
+
+@pytest.mark.neo4j
+async def test_async_twins_round_trip(db):
+    s = Settings()
+    async with AsyncGraphDatabase.driver(s.neo4j_uri, auth=s.neo4j_auth(), notifications_min_severity="OFF") as ad:
+        kw = {"ns": TEST_GRAPH_NS, "now": NOW, "timeout_s": 5.0}
+        steward = claims_for("steward")
+        assert await arecord_trace(ad, trace(), steward, retention_s=7 * DAY, **kw) == 3
+        with pytest.raises(TraceOwned):
+            await arecord_trace(ad, trace(sub="head_data"), claims_for("head_data"), retention_s=7 * DAY, **kw)
+        t = await aget_trace(ad, "a" * 32, steward, **kw)
+        assert t["answer"] == "Vendor A." and t["confirmed"] is False and len(t["steps"]) == 3
+        assert await aget_trace(ad, "a" * 32, claims_for("head_data"), **kw) is None
+        assert await amark_confirmed(ad, "a" * 32, "head_data", **kw) is False
+        assert await amark_confirmed(ad, "a" * 32, "steward", **kw) is True
+        assert (await aget_trace(ad, "a" * 32, steward, **kw))["confirmed"] is True
 
 
 @pytest.mark.neo4j
