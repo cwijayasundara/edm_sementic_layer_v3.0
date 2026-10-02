@@ -128,6 +128,20 @@ def create_app(*, settings: Settings | None = None, service: AgentService | None
                 raise HTTPException(404, "not found") from None
             raise HTTPException(502, "data service unavailable") from None
 
+    @app.get("/lineage/{handle}")
+    async def lineage(handle: str, user: UserContext = Depends(current_user)) -> dict:
+        if not HANDLE.match(handle):
+            raise HTTPException(404, "not found")
+        try:
+            async with factory(user) as gateway:
+                return await gateway.call("lineage", {"handle": handle})
+        except GatewayError as exc:
+            if exc.code in ("unknown_handle", "not_permitted"):
+                raise HTTPException(404, "not found") from None
+            if exc.code == "rate_limited":
+                raise HTTPException(429, "too many requests") from None
+            raise HTTPException(502, "data service unavailable") from None
+
     @app.post("/answers/{record_id}/confirm", status_code=204)
     async def confirm_answer(record_id: str, user: UserContext = Depends(current_user)) -> Response:
         if not RECORD_ID.match(record_id):

@@ -283,3 +283,23 @@ def test_confirm_answer_route_maps_gateway_outcomes():
         assert c.post(f"/answers/{bad}/confirm", headers=h).status_code == 422
     assert len(gw.calls) == calls                    # an invalid id never reaches the gateway
     assert c.post(f"/answers/{RID}/confirm").status_code == 401
+
+
+LINEAGE = {"nodes": [{"id": "metric:open_breaks", "kind": "Metric", "label": "open_breaks"}], "edges": [],
+           "truncated": False, "governed": True}
+
+
+def test_lineage_passthrough_and_error_mapping():
+    h = {"Authorization": f"Bearer {token()}"}
+    gw = FakeGateway({"lineage": LINEAGE})
+    c = app_with(gw)
+    assert c.get("/lineage/r_aaaaaaaaaaaa", headers=h).json() == LINEAGE
+    assert gw.calls == [("lineage", {"handle": "r_aaaaaaaaaaaa"})]
+    assert c.get("/lineage/not-a-handle", headers=h).status_code == 404
+    assert c.get("/lineage/r_aaaaaaaaaaaa").status_code == 401
+    for code, status, detail in (("unknown_handle", 404, "not found"), ("not_permitted", 404, "not found"),
+                                 ("rate_limited", 429, "too many requests"),
+                                 ("context_unavailable", 502, "data service unavailable")):
+        r = app_with(FakeGateway({"lineage": GatewayError(code, "secret detail")})).get(
+            "/lineage/r_bbbbbbbbbbbb", headers=h)
+        assert (r.status_code, r.json()) == (status, {"detail": detail})
