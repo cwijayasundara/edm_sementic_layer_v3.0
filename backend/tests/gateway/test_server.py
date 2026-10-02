@@ -1251,6 +1251,7 @@ class FakeTraces:
         self.saved: dict[str, tuple[dict, dict]] = {}
         self.confirmed: set[str] = set()
         self.fail: Exception | None = None
+        self.get_claims: list[dict] = []
 
     async def record(self, trace, claims):
         if self.fail:
@@ -1262,6 +1263,7 @@ class FakeTraces:
         return len(trace["steps"])
 
     async def get(self, run_id, claims):
+        self.get_claims.append(claims)
         t = self.saved.get(run_id)
         return {"run_id": run_id, "steps": t[0]["steps"]} if t and t[0]["sub"] == claims["sub"] else None
 
@@ -1368,3 +1370,20 @@ async def test_trace_store_outage_maps_to_context_unavailable(settings, fake_cat
 def test_trace_tools_are_never_offered_to_the_llm():
     names = {t.name for t in SUPERVISOR_TOOLS + SUBAGENT_TOOLS} | set(GATEWAY_TOOL_NAMES)
     assert not names & {"record_trace", "get_trace", "mark_trace_confirmed"}
+
+
+async def test_trace_store_always_gets_fail_closed_metrics_only(settings, fake_catalog):
+    traces = FakeTraces()
+    gw = make_gateway(settings, fake_catalog, traces=traces)
+    args = {"run_id": RUN, "question": "q", "answer": "a", "path": "p", "status": "ok", "steps": [STEP]}
+    no_flag = {k: v for k, v in claims_for("head_data").items() if k != "metrics_only"}
+    _, app = create_app(settings, gateway=gw)
+    async with serving(app) as base:
+        for who in (token(settings, "bi_analyst"), token(settings, no_flag)):
+            async with mcp_client(f"{base}/mcp", who) as c:
+                traces.saved.clear()
+                traces.get_claims.clear()
+                body(await c.call_tool("record_trace", args))
+                body(await c.call_tool("get_trace", {"run_id": RUN}))
+            assert traces.saved[RUN][1]["metrics_only"] is True
+            assert [cl["metrics_only"] for cl in traces.get_claims] == [True]
