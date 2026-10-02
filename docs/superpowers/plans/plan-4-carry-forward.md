@@ -66,7 +66,7 @@ schema has `$defs`/`$ref`; it is sent to the model as is (inlining was deliberat
 The agent calls `record_answer(..., verified=True)` for every delivered, non-fallback dashboard that rests on
 governed-metric handles (it sends only those handles). The gateway decides whether to accept the claim and distils
 only metric-backed history, but nothing asks a human. M6 should add a thumbs-up/confirm step and send `verified`
-only after it.
+only after it. Closed in Plan 6: see plan-6 carry-forward.
 
 ## Spec deltas (what the design said and what was built)
 - Escalation: the spec escalates to the stronger model on multi-source questions or low confidence; we escalate once,

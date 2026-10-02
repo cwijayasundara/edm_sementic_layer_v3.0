@@ -711,3 +711,7 @@ def test_read_rows_runs_in_a_read_only_transaction(hist_db):
         spy = _ReadOnlySpy(pg)
         rows, _, _ = read_rows(spy)
     assert len(rows) == 1 and spy.seen and set(spy.seen) == {"on"}
+
+
+def test_distilled_executions_are_human_verified():
+    assert STATUS == "verified"

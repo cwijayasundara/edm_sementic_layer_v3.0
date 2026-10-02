@@ -2,9 +2,10 @@
 (:Question)-[:ANSWERED_BY]->(:Execution)-[:USED]->(:Metric | :Dimension), so search_context can offer what worked
 before as few-shot examples (spec §4.4, "Query history").
 
-What `verified` means today: record_answer stores verified=true only when the agent asked for it AND >= 1 catalog
-metric resolves from the caller's own live result handles. It is "agent-claimed, metric-backed", NOT human-confirmed
-(the UI thumbs-up path is Plan 4), so distilled executions carry status `agent_verified`, never `verified`.
+What `verified` means: a person confirmed the answer. The gateway's record_answer always stores verified=false (with
+metric_backed=true when every handle resolves to catalog metrics), and only confirm_answer, which the agent calls when
+the user presses "Confirm" in the UI, sets verified=true, and only on the caller's own metric-backed, ok row. So
+distilled executions carry status `verified`, like the curated seed history.
 
 Trust rules (the question text is user/agent supplied and is treated as untrusted):
 - Source rows: verified = true AND status = 'ok' (in SQL, re-checked here) AND >= 1 metric id, every one of which is
@@ -21,7 +22,7 @@ Trust rules (the question text is user/agent supplied and is treated as untruste
   phrase, carries a bare domain (a dot glued between letters) or spells out a link (`unsafe_text`); or when it carries values (`result_values`: plan_result_leaks, ids,
   more than one digit, number words, a lone number that is not a method parameter). Digit-free entity names
   ("Vendor A") cannot be told from vocabulary: a residual risk, bounded by the distinct-caller rule and the gate.
-  The text is stored only as data (`name`/`text`), never in an instruction-bearing field, and consumers (the Plan 4
+  The text is stored only as data (`name`/`text`), never in an instruction-bearing field, and consumers (the
   agent) must quote examples as data, never follow them as instructions.
 - Row scope (D5b): the gate is scope-only, so a question naming a row-scope value a role is restricted to (EMEA,
   bank, Growth, custodian, ...: `row_scope_terms`, read from the catalog roles at run time) is skipped
@@ -70,7 +71,7 @@ from prism.graph.loader import TX_TIMEOUT_S, check_ns, production_ns, uid_for
 from prism.graph.model import search_text
 
 ORIGIN = "history"
-STATUS = "agent_verified"
+STATUS = "verified"
 MAX_QUESTION_CHARS = 200
 MAX_RAW_CHARS = 4 * MAX_QUESTION_CHARS
 MAX_WORD_CHARS = 30

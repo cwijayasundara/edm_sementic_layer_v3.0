@@ -77,9 +77,11 @@ supersedes history nodes, so run `make distill` after `make graph`.
 The distiller has had an independent security review; its findings (poisoning by one caller, floods, homoglyph /
 link / instruction text, values in words, row-scope leaks) are fixed as described above.
 
-**`verified` today means "agent-claimed and metric-backed", not human-confirmed:** the gateway stores it true only
-when the agent asked AND a governed metric resolves from the caller's own live handles. Distilled executions therefore
-carry `status: agent_verified` (seed history carries `verified`). The human confirmation (UI thumbs-up) is Plan 4.
+**`verified` means a person confirmed the answer.** The agent records every delivered answer through `record_answer`,
+which stores `verified = false`, a `metric_backed` flag and a `record_id`. The UI shows "Correct? Confirm" on a
+metric-backed answer; pressing it calls `POST /answers/{record_id}/confirm` on the agent, which calls the gateway's
+`confirm_answer`. That sets `verified = true` on the caller's own metric-backed row only. Distilled executions carry
+`status: verified`. Rows recorded before this change were reset to unverified (migration 5) and cannot be confirmed.
 
 ## Semantic gateway (port 8200, `PRISM_GATEWAY_PORT`)
 ```
@@ -95,7 +97,7 @@ carry `status: agent_verified` (seed history carries `verified`). The human conf
      results ─▶ in-memory ResultStore (per-sub handles, 15 min) ─▶ get_rows pages, combine (hardened DuckDB)
      every call ─▶ app.audit (one row);  record_answer ─▶ app.query_log ──(make distill)──▶ graph history layer
 ```
-The only agent-facing door to the data: one MCP server (`gateway-mcp` audience tokens, stateless HTTP) with six tools.
+The only agent-facing door to the data: one MCP server (`gateway-mcp` audience tokens, stateless HTTP) with seven tools.
 Identity and entitlements come from the verified token, never from tool arguments; every call writes one row to
 `app.audit` (catalog names, counts and codes only: no row values, tokens or question text; the question is kept as
 an HMAC).
@@ -107,7 +109,8 @@ an HMAC).
 | `query_source(source, request)` | guarded free-form read, `request={"sql": "SELECT ..."}` or `{"endpoint_id": ..., "params": {...}}`; not for metrics-only roles |
 | `get_rows(handle, offset=0, limit=50)` | one page (max 200 rows) of your own result |
 | `combine(sql, handles)` | one DuckDB SELECT over your own handles (`{"t": "<handle>"}`), in memory |
-| `record_answer(question, plan, handles, verified)` | query history (`app.query_log`): the metrics/dimensions of >= 1 of your own live handles, never the plan text; `verified` is a request, stored true only when a governed metric backs the handles (the human-confirmed path is Plan 4) |
+| `record_answer(question, plan, handles)` | query history (`app.query_log`): the metrics/dimensions of >= 1 of your own live handles, never the plan text; stored unverified with `metric_backed` and a returned `record_id` |
+| `confirm_answer(record_id)` | human confirmation: sets `verified` on your own metric-backed answer; `not_confirmable` otherwise (never says why) |
 
 Errors read `Error executing tool <name>: <code>: <message>` (codes such as `not_permitted`, `metrics_only`,
 `invalid_request`, `unknown_handle`, `context_unavailable`, `source_unavailable`, `rate_limited`, `gateway_busy`).
@@ -130,7 +133,7 @@ uv run python -m prism.gateway.cli call run_metric --as cash_ops_emea --args '{"
 uv run python -m prism.gateway.cli call query_source --as head_data --args '{"source": "cashrecon", "request": {"sql": "SELECT region, count(*) FROM breaks GROUP BY region"}}'
 uv run python -m prism.gateway.cli call get_rows --as cash_ops_emea --args '{"handle": "r_...", "offset": 0, "limit": 50}'
 uv run python -m prism.gateway.cli call combine --as head_data --args '{"sql": "SELECT ccy, sum(value) AS total FROM a GROUP BY ccy", "handles": {"a": "r_..."}}'
-uv run python -m prism.gateway.cli call record_answer --as head_data --args '{"question": "Open breaks by region?", "plan": "run_metric", "handles": ["r_..."], "verified": true}'
+uv run python -m prism.gateway.cli call record_answer --as head_data --args '{"question": "Open breaks by region?", "plan": "run_metric", "handles": ["r_..."]}'
 ```
 Handles belong to the `sub` that created them (the CLI's `sub` is the persona id) and live 15 minutes in the running
 gateway process; another caller's handle answers `unknown_handle`.
@@ -146,7 +149,7 @@ Security notes:
   rows); amounts are never summed across currencies (`currency_mixing`).
 - Audit and query log hold catalog names, counts and codes; the question text only in `app.query_log` (when
   `PRISM_STORE_QUESTIONS` is on), as an HMAC elsewhere. Every secret is a `SecretStr`; `PRISM_ENV=production` refuses
-  every dev default. `record_answer`'s `verified` is a request (see Query history).
+  every dev default. Only `confirm_answer` sets `verified` (see Query history).
 
 ## Agent service (M4, port 8000, `PRISM_AGENT_PORT`)
 FastAPI service in front of the gateway: it answers a question by driving the gateway tools as the caller (the caller's
