@@ -1,4 +1,4 @@
-.PHONY: test test-fast test-mcp test-graph test-gateway test-live seed reseed db models graph distill gateway agent clean-test-dbs frontend test-ui e2e
+.PHONY: test test-fast test-mcp test-graph test-gateway test-live seed reseed db models graph distill gateway agent clean-test-dbs frontend test-ui e2e eval eval-check
 
 # Databases the test suite creates under its own prefixes (backend/tests/db_cleanup.py); never test_* or real ones.
 TEST_DB_REGEX = ^(testapp|testappnew|testmig|testhist|testhistcli)_
@@ -68,3 +68,12 @@ test-ui:
 # Playwright smoke against a mocked agent (no stack, no API key). PRISM_E2E_LIVE=1 adds the live login + KPI check.
 e2e:
 	cd frontend && npx playwright install chromium && npm run e2e
+
+# Live evals: golden + red-team questions through the running agent and the real model (costs API money; needs
+# scripts/start_backend.sh and ANTHROPIC_API_KEY). Reports in backend/evals/reports/. Exit 1 on any red-team leak.
+eval:
+	cd backend && HF_HUB_OFFLINE=1 uv run python -m prism.evals.cli --suite all
+
+# The eval case files against the live seed, without the model: references replay, stories hold, canaries are placed.
+eval-check:
+	cd backend && HF_HUB_OFFLINE=1 uv run python -m prism.evals.cli --check-references

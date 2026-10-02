@@ -21,6 +21,7 @@ docs/IMG_1131.JPG
 .cache/
 
 # Local tooling, temporary files and generated artifacts
+backend/evals/reports/
 .git-rewrite/
 .ruff_cache/
 .mypy_cache/
