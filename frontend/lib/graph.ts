@@ -33,7 +33,7 @@ function kindColor(g: Lineage, k: LineageKind): string {
 }
 
 /** Lineage -> one ECharts force graph. Node `name` is the node id (ECharts links resolve by name). */
-export function toGraphOption(g: Lineage): EChartsOption {
+export function toGraphOption(g: Lineage, opts: { highlight?: Set<string> } = {}): EChartsOption {
   const kinds = LINEAGE_KINDS.filter((k) => g.nodes.some((n) => n.kind === k));
   return {
     tooltip: { formatter: (p: any) => (p.dataType === "edge" ? p.data.type : `${KIND_LABEL[p.data.kind as LineageKind]}: ${p.data.fullLabel}`) },
@@ -47,7 +47,8 @@ export function toGraphOption(g: Lineage): EChartsOption {
       lineStyle: { color: "#c3cad6", width: 1, curveness: 0.08 },
       emphasis: { focus: "adjacency", lineStyle: { width: 2 } },
       data: g.nodes.map((n) => ({ name: n.id, fullLabel: n.label, kind: n.kind, category: kinds.indexOf(n.kind),
-        symbolSize: NODE_SIZE[n.kind], itemStyle: { color: nodeColor(n) } })),
+        symbolSize: NODE_SIZE[n.kind], itemStyle: { color: nodeColor(n),
+          ...(opts.highlight?.has(n.id) ? { borderColor: "#e0a526", borderWidth: 3 } : {}) } })),
       links: g.edges.map((e) => ({ source: e.from, target: e.to, type: e.type })),
     }],
   } as EChartsOption;

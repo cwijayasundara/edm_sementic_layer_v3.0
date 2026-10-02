@@ -96,3 +96,17 @@ export const LineageEdge = z.object({ from: z.string(), to: z.string(), type: z.
 export const Lineage = z.object({ nodes: z.array(LineageNode), edges: z.array(LineageEdge), truncated: z.boolean(),
   governed: z.boolean() });
 export type Lineage = z.infer<typeof Lineage>;
+
+export const TraceNode = z.object({ id: z.string(), kind: z.enum(LINEAGE_KINDS), label: z.string() });
+export const TraceStep = z.object({
+  seq: z.number(), parent: z.number().nullable(), kind: z.string(), label: z.string(), note: z.string().nullable(),
+  considered: z.array(z.string()).default([]), ms: z.number().nullable(), status: z.string().nullable(),
+  error_code: z.string().nullable(), tool: z.string().nullable(), args: z.string().nullable(),
+  handle: z.string().nullable(), rows: z.number().nullable(), truncated: z.boolean().nullable(),
+  touched: z.array(TraceNode).default([]),
+});
+export type TraceStep = z.infer<typeof TraceStep>;
+export const Trace = z.object({ run_id: z.string(), question: z.string().nullable(), answer: z.string().nullable(),
+  path: z.string().nullable(), status: z.string().nullable(), confirmed: z.boolean(), created_at: z.number(),
+  steps: z.array(TraceStep) });
+export type Trace = z.infer<typeof Trace>;

@@ -41,6 +41,13 @@ describe("toGraphOption", () => {
     expect(o.tooltip.formatter({ dataType: "node", data: q })).toContain("Past question: Which legal entity");
     expect(o.tooltip.formatter({ dataType: "edge", data: { type: "PROVIDES" } })).toBe("PROVIDES");
   });
+
+  it("rings highlighted nodes", () => {
+    const s = (toGraphOption(g, { highlight: new Set(["metric:open_breaks"]) }) as any).series[0];
+    expect(s.data[0].itemStyle.borderWidth).toBe(3);
+    expect(s.data[0].itemStyle.borderColor).toBe("#e0a526");
+    expect(s.data[1].itemStyle.borderWidth).toBeUndefined();
+  });
 });
 
 describe("node styling", () => {

@@ -1,7 +1,7 @@
 import { parseSse } from "@/lib/sse";
 import {
   type ChatEvent, DashboardList, DashboardRun, type DashboardSummary, DevToken, KpisResponse, type KpiTile, Lineage,
-  type Recipe, ResultPage, type Widget,
+  type Recipe, ResultPage, Trace, type Widget,
 } from "@/lib/schemas";
 
 export const AGENT_URL = (process.env.NEXT_PUBLIC_AGENT_URL ?? "http://localhost:8000").replace(/\/$/, "");
@@ -45,8 +45,12 @@ export const api = {
     const q = new URLSearchParams({ offset: String(offset), limit: String(limit) });
     return ResultPage.parse(await json(await request(`/results/${encodeURIComponent(handle)}?${q}`, { token })));
   },
-  async confirm(token: string, recordId: string): Promise<void> {
-    await request(`/answers/${encodeURIComponent(recordId)}/confirm`, { token, method: "POST" });
+  async trace(token: string, runId: string): Promise<Trace> {
+    return Trace.parse(await json(await request(`/runs/${encodeURIComponent(runId)}/trace`, { token })));
+  },
+  async confirm(token: string, recordId: string, runId?: string): Promise<void> {
+    const q = runId ? `?run_id=${encodeURIComponent(runId)}` : "";
+    await request(`/answers/${encodeURIComponent(recordId)}/confirm${q}`, { token, method: "POST" });
   },
   async *chat(token: string, question: string, signal: AbortSignal): AsyncGenerator<ChatEvent> {
     const res = await request("/chat", { token, method: "POST", body: { question }, signal });

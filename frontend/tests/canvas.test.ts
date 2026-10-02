@@ -59,4 +59,11 @@ describe("canvasReducer", () => {
     const pinned = canvasReducer(twice, { type: "togglePin", key: "d1:0" });
     expect(pinned.map((i) => i.pinned)).toEqual([true, false]);
   });
+
+  it("setRun attaches the run id to the turn's items only", () => {
+    let items = add(add([], "t1:w1"), "t2:w1");
+    items = canvasReducer(items, { type: "setRun", turnId: "t1", runId: "a".repeat(32) });
+    expect(items.find((i) => i.key === "t1:w1")!.runId).toBe("a".repeat(32));
+    expect(items.find((i) => i.key === "t2:w1")!.runId).toBeUndefined();
+  });
 });
