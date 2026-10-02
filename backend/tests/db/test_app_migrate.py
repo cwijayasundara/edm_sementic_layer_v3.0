@@ -148,6 +148,10 @@ def _app_role_rights(settings: Settings) -> dict:
         return {
             "tables": tables,
             "column_update": one("SELECT has_any_column_privilege(%s, 'app.audit', 'UPDATE')", role),
+            "query_log_verified_update": one(
+                "SELECT has_column_privilege(%s, 'app.query_log', 'verified', 'UPDATE')", role),
+            "query_log_status_update": one(
+                "SELECT has_column_privilege(%s, 'app.query_log', 'status', 'UPDATE')", role),
             "schema_create": one("SELECT has_schema_privilege(%s, 'app', 'CREATE')", role),
             "public_create": one("SELECT has_schema_privilege(%s, 'public', 'CREATE')", role),
             "db_temp": one("SELECT has_database_privilege(%s, %s, 'TEMP')", role, db),
@@ -166,9 +170,25 @@ EXPECTED_RIGHTS = {
                "app.agent_runs": {"SELECT", "INSERT"},
                "app.saved_dashboards": {"SELECT", "INSERT", "DELETE"},
                "app.schema_migrations": set(), "public.seed_info": set()},
-    "column_update": False, "schema_create": False, "public_create": False, "db_temp": False, "db_create": False,
+    "column_update": False, "query_log_verified_update": True, "query_log_status_update": False,
+    "schema_create": False, "public_create": False, "db_temp": False, "db_create": False,
     "member_of": [], "members": [],
 }
+
+
+def test_migration_5_resets_agent_claimed_rows(app_settings):
+    """Rows written before human confirmation existed: verified was only agent-claimed. Migration 5 keeps that claim
+    as metric_backed, clears verified and leaves record_id NULL, so such a row can never be confirmed."""
+    ddl = dict(MIGRATIONS)[5]
+    sub = f"mig5-{uuid.uuid4().hex[:8]}"
+    with _admin(app_settings) as conn:
+        conn.execute("CREATE TEMP TABLE ql_before (LIKE app.query_log INCLUDING DEFAULTS INCLUDING IDENTITY)")
+        conn.execute("ALTER TABLE ql_before DROP COLUMN record_id, DROP COLUMN metric_backed")
+        conn.execute("INSERT INTO ql_before (sub, question_hash, verified, status) VALUES "
+                     "(%s, repeat('a', 64), true, 'ok'), (%s, repeat('b', 64), false, 'ok')", (sub, sub))
+        conn.execute(ddl.replace("app.query_log", "ql_before"))
+        rows = conn.execute("SELECT verified, metric_backed, record_id FROM ql_before ORDER BY question_hash").fetchall()
+    assert rows == [(False, True, None), (False, False, None)]
 
 
 def test_migrate_app_heals_stale_grants_and_memberships(app_settings):
@@ -200,6 +220,8 @@ def test_migrate_app_heals_stale_grants_and_memberships(app_settings):
                           "TRUNCATE app.audit", "CREATE TABLE app.sneaky (x int)", "CREATE TEMP TABLE t (x int)"):
             with pytest.raises(psycopg.errors.InsufficientPrivilege):
                 conn.execute(statement)
+    with psycopg.connect(app_settings.app_dsn(), autocommit=True) as conn:
+        conn.execute("UPDATE app.query_log SET verified = verified WHERE false")   # the one column it may update
 
 
 @pytest.mark.parametrize("name", ["prism_svc", "bi_reader", "prism_view_owner", "postgres"])

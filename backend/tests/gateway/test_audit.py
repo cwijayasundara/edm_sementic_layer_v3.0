@@ -18,6 +18,7 @@ from prism.gateway.audit import (
     AUDIT_FIELDS,
     MAX_LIST_LEN,
     MAX_PLAN_LEN,
+    AuditUnavailable,
     AuditWriter,
     configure_audit_logging,
     open_audit_pool,
@@ -399,3 +400,39 @@ async def test_query_history_rejects_an_invalid_sub(pool, sub):
 async def test_query_history_rejects_an_invalid_limit(pool, limit):
     with pytest.raises(ValueError):
         await AuditWriter(pool).query_history("u-1", limit=limit)
+
+
+async def test_log_query_stores_record_id_and_metric_backed(pool, app_settings):
+    sub, rid = f"u-{uuid.uuid4().hex}", str(uuid.uuid4())
+    writer = AuditWriter(pool)
+    assert await writer.log_query({"sub": sub, "question": "q?", "verified": False, "status": "ok",
+                                   "record_id": rid, "metric_backed": True}) is True
+    assert await writer.log_query({"sub": sub, "question": "q2?", "status": "ok",
+                                   "record_id": "not-a-uuid", "metric_backed": "yes"}) is True
+    first, second = _query_rows(app_settings, sub)
+    assert first["record_id"] == rid and first["metric_backed"] is True and first["verified"] is False
+    assert second["record_id"] is None and second["metric_backed"] is False
+
+
+async def test_confirm_answer_flips_only_the_callers_metric_backed_ok_row(pool, app_settings):
+    sub, other = f"u-{uuid.uuid4().hex}", f"u-{uuid.uuid4().hex}"
+    good, raw, failed = (str(uuid.uuid4()) for _ in range(3))
+    writer = AuditWriter(pool)
+    for rid, backed, status in ((good, True, "ok"), (raw, False, "ok"), (failed, True, "error")):
+        await writer.log_query({"sub": sub, "question": "q?", "status": status, "record_id": rid,
+                                "metric_backed": backed})
+    assert await writer.confirm_answer(other, good) is False          # not the caller's row
+    assert await writer.confirm_answer(sub, raw) is False             # not metric-backed
+    assert await writer.confirm_answer(sub, failed) is False          # not ok
+    assert await writer.confirm_answer(sub, str(uuid.uuid4())) is False
+    assert await writer.confirm_answer(sub, "x' OR '1'='1") is False  # invalid id: no query at all
+    assert await writer.confirm_answer(sub, good) is True
+    assert await writer.confirm_answer(sub, good) is True             # idempotent
+    assert [r["verified"] for r in _query_rows(app_settings, sub)] == [True, False, False]
+
+
+async def test_confirm_answer_raises_when_the_database_fails(app_settings):
+    pool = await open_audit_pool(app_settings)
+    await pool.close()
+    with pytest.raises(AuditUnavailable):
+        await AuditWriter(pool).confirm_answer("s", str(uuid.uuid4()))

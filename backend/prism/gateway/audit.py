@@ -8,7 +8,8 @@ questions). The audit timestamp is always the database's now(); a caller-supplie
 
 A query-log `plan` is never free text: only the structured form {"metric_ids": [...], "dimensions": [...]}
 is accepted, and only names matching the metric/dimension name pattern survive. The plan is derived from
-the question, so it is stored only when `store_questions` is on. Writes never raise into the caller: a
+the question, so it is stored only when `store_questions` is on. A query-log row carries a gateway-made `record_id`
+and `metric_backed`; `confirm_answer` is the only update, and it sets `verified` on the caller's own metric-backed row. Writes never raise into the caller: a
 failure is logged and counted in `dropped`.
 """
 import asyncio
@@ -32,7 +33,8 @@ AUDIT_LOGGERS = ("prism.mcp.audit", "prism.gateway.audit")
 AUDIT_FIELDS = ("ts", "sub", "persona", "tool", "source", "metric_id", "dimensions", "status", "rows",
                 "bytes", "truncated", "ms", "question_hash", "result_handle", "error_code")
 QUERY_LOG_FIELDS = ("sub", "persona", "question_hash", "question", "plan", "handles", "metric_ids",
-                    "verified", "status")
+                    "verified", "status", "record_id", "metric_backed")
+RECORD_ID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 HISTORY_MAX = 100
 MAX_SUB_LEN = 256
 MAX_PLAN_LEN = 4000
@@ -58,9 +60,15 @@ _INSERT_AUDIT = (
     "%(result_handle)s, %(error_code)s)"
 )
 _INSERT_QUERY = (
-    "INSERT INTO app.query_log (sub, persona, question_hash, question, plan, handles, metric_ids, verified, status) "
+    "INSERT INTO app.query_log (sub, persona, question_hash, question, plan, handles, metric_ids, verified, status, "
+    "record_id, metric_backed) "
     "VALUES (%(sub)s, %(persona)s, %(question_hash)s, %(question)s, %(plan)s, %(handles)s, %(metric_ids)s, "
-    "%(verified)s, %(status)s)"
+    "%(verified)s, %(status)s, %(record_id)s, %(metric_backed)s)"
+)
+# the only UPDATE the app role may run (column grant on `verified`): the caller's own metric-backed, ok row
+_CONFIRM = (
+    "UPDATE app.query_log SET verified = true "
+    "WHERE record_id = %s AND sub = %s AND metric_backed AND status = 'ok' RETURNING id"
 )
 _HISTORY = (
     "SELECT ts, persona, question, question_hash, plan, handles, metric_ids, verified, status "
@@ -168,6 +176,8 @@ def sanitize_query_event(event: dict, *, store_questions: bool, key: str) -> dic
         "metric_ids": _idents(event.get("metric_ids")),
         "verified": event.get("verified") is True,
         "status": _match(_IDENT, event.get("status")),
+        "record_id": _match(RECORD_ID, event.get("record_id")),
+        "metric_backed": event.get("metric_backed") is True,
     }
 
 
@@ -229,6 +239,23 @@ class AuditWriter:
         except Exception as exc:  # noqa: BLE001 - history capture must never break the caller's request
             self._drop("query_log", exc)
             return False
+
+    async def confirm_answer(self, sub: str, record_id: str) -> bool:
+        """Human confirmation: set verified on the caller's own metric-backed, ok row. True when such a row exists
+        (confirming twice is fine), False for anything else (unknown id, another caller's row, not metric-backed,
+        not ok, invalid input). Raises AuditUnavailable when the database fails: unlike log_query, the caller must
+        be able to tell "no" from "try again"."""
+        if not valid_sub(sub) or _match(RECORD_ID, record_id) is None:
+            return False
+        try:
+            async with asyncio.timeout(self._timeout_s):
+                async with self._pool.connection(timeout=self._timeout_s) as conn:
+                    cur = await conn.execute(_CONFIRM, (record_id, sub))
+                    return await cur.fetchone() is not None
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            raise AuditUnavailable(f"confirm unavailable ({type(exc).__name__})") from None
 
     async def query_history(self, sub: str, limit: int = 20) -> list[dict[str, Any]]:
         """This caller's recent questions, newest first (never another caller's).

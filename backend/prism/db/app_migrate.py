@@ -6,7 +6,7 @@ the gateway runs `migrate_app` at startup. Every step here is safe to repeat.
 Grants are declarative: each run first revokes everything the app role holds on the app database, its
 `app`/`public` schemas and their tables/sequences/functions (and its role memberships, both ways), then
 grants exactly CONNECT, USAGE on `app`, SELECT/INSERT on
-the app tables and DELETE on `app.saved_dashboards`. A stale
+the app tables, DELETE on `app.saved_dashboards` and UPDATE of `app.query_log.verified` only. A stale
 UPDATE/DELETE/TRUNCATE grant or membership therefore disappears on the next run. The app role name may
 not be a reserved/source role, a superuser or a database owner (checked before anything is altered).
 
@@ -102,6 +102,13 @@ MIGRATIONS: tuple[tuple[int, str], ...] = (
         );
         CREATE INDEX IF NOT EXISTS saved_dashboards_sub ON app.saved_dashboards (sub, created_at DESC);
     """),
+    (5, """
+        ALTER TABLE app.query_log ADD COLUMN IF NOT EXISTS record_id uuid;
+        ALTER TABLE app.query_log ADD COLUMN IF NOT EXISTS metric_backed boolean NOT NULL DEFAULT false;
+        -- every verified row so far was agent-claimed (metric-backed), never human-confirmed
+        UPDATE app.query_log SET metric_backed = verified, verified = false WHERE record_id IS NULL;
+        CREATE UNIQUE INDEX IF NOT EXISTS query_log_record_id ON app.query_log (record_id);
+    """),
 )
 
 APP_TABLES = ("audit", "query_log", "agent_runs", "saved_dashboards")
@@ -187,6 +194,8 @@ def _grant_statements(app_user: str) -> list[sql.Composable]:
         sql.SQL("GRANT SELECT, INSERT ON {} TO {}").format(tables, role),
         # saved dashboards are the user's own rows: they may delete them (never update)
         *[sql.SQL("GRANT DELETE ON {} TO {}").format(sql.Identifier("app", t), role) for t in DELETABLE_TABLES],
+        # human confirmation flips exactly one column of the caller's own row (prism.gateway.audit.confirm_answer)
+        sql.SQL("GRANT UPDATE (verified) ON app.query_log TO {}").format(role),
     ]
 
 
