@@ -434,3 +434,42 @@ async def test_retry_clears_pending_note_but_keeps_steps():
     state.pending_note = "stale"
     AgentService._reset_for_retry(state)
     assert state.pending_note is None and len(state.steps) == 1
+
+
+async def test_answer_event_is_yielded_before_the_trace_write():
+    gw = _metric_gw(record_answer={"record_id": "11111111-1111-4111-8111-111111111111", "metric_backed": True})
+    seen = []
+    orig = gw.call
+
+    async def spy(tool, args):
+        seen.append((tool, len(events)))
+        return await orig(tool, args)
+
+    gw.call = spy
+    events = []
+    client = ScriptedModelClient([
+        reply_tools(("run_metric", {"metric_id": "open_breaks", "dimensions": ["region"]})),
+        reply_tools(("visualize", {"handles": ["r_aaaaaaaaaaaa"], "intent": "by region"})),
+        reply_tools(("emit_dashboard_spec", GOOD_SPEC)),
+        reply_text("EMEA has the most open breaks.")])
+    async for e in service(gw, client).chat(USER, "q?"):
+        events.append(e)
+    types = [e["type"] for e in events]
+    assert "answer" in types and types[-1] == "telemetry"
+    at = dict(seen)["record_trace"]
+    assert at > types.index("answer")   # the answer event had already been yielded
+
+
+async def test_hanging_trace_write_is_bounded(monkeypatch, caplog):
+    monkeypatch.setattr("prism.agent.service.TRACE_WRITE_TIMEOUT_S", 0.05)
+
+    class HangingGateway(FakeGateway):
+        async def call(self, tool, arguments):
+            if tool == "record_trace":
+                await asyncio.Event().wait()
+            return await super().call(tool, arguments)
+
+    gw = HangingGateway({"run_metric": summary(metric_id="open_breaks"), "record_answer": {"recorded": True}})
+    with caplog.at_level("WARNING", logger="prism.agent"):
+        events = await asyncio.wait_for(collect(service(gw, ScriptedModelClient(_metric_script()))), 5)
+    assert events[-1]["type"] == "telemetry" and "trace_write_failed: timeout" in caplog.text

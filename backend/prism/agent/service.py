@@ -27,6 +27,7 @@ RECORDED_HANDLES = 20
 NO_ANSWER = "I could not produce an answer for that question."
 RUN_ID = re.compile(r"^[0-9a-f]{32}$")
 MAX_TRACE_STEPS = 40
+TRACE_WRITE_TIMEOUT_S = 3.0
 RECORD_ID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 
 
@@ -100,11 +101,11 @@ class AgentService:
         events = self._answer_events(state, text)
         for event in events:
             yield event
-        summary_text = next((e["text"] for e in reversed(events) if e["type"] == "summary"), "")
-        await self._record_trace(gateway, state, run.status, summary_text)
         recorded = await self._record_answer(gateway, question, state)
         if recorded is not None:
             yield {"type": "answer", **recorded}
+        summary_text = next((e["text"] for e in reversed(events) if e["type"] == "summary"), "")
+        await self._record_trace(gateway, state, run.status, summary_text)   # after the answer event, before telemetry
 
     async def _supervise(self, user: UserContext, toolbox: ToolBox, state: RunState,
                          question: str) -> tuple[str, str | None]:
@@ -160,9 +161,11 @@ class AgentService:
         steps = state.steps if len(state.steps) <= MAX_TRACE_STEPS else \
             [*state.steps[:MAX_TRACE_STEPS - 1], state.steps[-1]]
         try:
-            await gateway.call("record_trace", {
+            await asyncio.wait_for(gateway.call("record_trace", {
                 "run_id": state.run_id, "question": state.question, "answer": (text or "")[:2000],
-                "path": self._path(state), "status": status, "steps": steps})
+                "path": self._path(state), "status": status, "steps": steps}), TRACE_WRITE_TIMEOUT_S)
+        except TimeoutError:
+            log.warning("trace_write_failed: timeout")
         except Exception as exc:  # noqa: BLE001 - the trace is a side record
             log.warning("trace_write_failed: %s", getattr(exc, "code", type(exc).__name__))
 
