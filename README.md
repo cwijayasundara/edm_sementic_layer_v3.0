@@ -170,6 +170,17 @@ curl -sN -XPOST localhost:8000/chat -H "Authorization: Bearer $T" -H 'content-ty
   persona matrix and handle isolation, and asserts every KPI tile in `backend/prism/agent/kpis.yaml` answers for its
   persona. Live runs write smoke rows into the real app database (`app.audit_log`, `app.agent_runs`, `app.query_log`).
 
+## UI (M5)
+
+1. Start the backend: `scripts/start_backend.sh` (turns `/dev/token` on for the local demo).
+2. Start the UI: `make frontend` (or `scripts/start_frontend.sh`), then open http://localhost:3000.
+3. Pick a persona. The KPI strip, chips and every answer are scoped to that persona.
+4. Ask a question in the assistant (needs `ANTHROPIC_API_KEY` for `/chat`). Pin widgets, then "Save pinned" to keep
+   them; "Dashboards" re-runs a saved dashboard with your current access (no model call).
+
+Tests: `make test-ui` (lint, types, vitest) and `make e2e` (Playwright against a mocked agent;
+`PRISM_E2E_LIVE=1 make e2e` checks login and KPIs against the running stack).
+
 ## Tests
 ```bash
 make test        # needs Docker (starts Postgres); live checks are deselected (pyproject addopts -m "not live")
