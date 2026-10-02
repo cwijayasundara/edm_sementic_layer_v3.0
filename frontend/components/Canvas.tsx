@@ -20,7 +20,7 @@ export function Canvas({ items, dispatch, onProvenance, onAsk }:
     );
   }
   return (
-    <section aria-label="Canvas" className="grid gap-4 xl:grid-cols-2">
+    <section aria-label="Canvas" className="grid gap-4 xl:grid-cols-2 xl:[&>*:only-child]:col-span-2">
       {items.map((item) => (
         <WidgetCard key={item.key} item={item}
           onRemove={() => dispatch({ type: "remove", key: item.key })}

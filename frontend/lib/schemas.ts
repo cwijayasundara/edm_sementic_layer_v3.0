@@ -62,7 +62,7 @@ export const CHAT_EVENT_TYPES = new Set(["plan", "widget", "summary", "answer", 
 
 export const KpiTile = z.object({
   label: z.string(), metric_id: z.string(), unit: z.string().default(""),
-  status: z.enum(["ok", "unavailable"]), value: z.number().nullable().optional(),
+  status: z.enum(["ok", "unavailable"]), value: z.number().nullable().optional(), source: z.string().nullable().optional(),
 });
 export type KpiTile = z.infer<typeof KpiTile>;
 export const KpisResponse = z.object({ tiles: z.array(KpiTile) });

@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type { EChartsOption } from "echarts";
+import { PALETTE } from "@/lib/echartsTheme";
 import { formatValue } from "@/lib/format";
 import type { Widget } from "@/lib/schemas";
 
@@ -14,6 +15,20 @@ function index(columns: string[], name: string | null | undefined, field: string
 
 const toNum = (v: unknown): number | null => (typeof v === "number" ? v : v == null || v === "" ? null : Number.isFinite(Number(v)) ? Number(v) : null);
 const label = (v: unknown) => (v == null ? "(none)" : String(v));
+
+/** "vendor_id" -> "Vendor ID": a column name as an axis title. */
+export function axisName(column: string | null | undefined): string | undefined {
+  if (!column) return undefined;
+  const words = column.replace(/[_-]+/g, " ").trim().toLowerCase().replace(/\bid\b/g, "ID");
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+/** `hex` mixed toward white: the colour of the bars that are not the largest. */
+function tint(hex: string, amount = 0.55): string {
+  const n = parseInt(hex.slice(1), 16);
+  const mix = (c: number) => Math.round(c + (255 - c) * amount).toString(16).padStart(2, "0");
+  return `#${mix(n >> 16)}${mix((n >> 8) & 255)}${mix(n & 255)}`;
+}
 
 function uniq(values: string[]): string[] {
   return [...new Set(values)];
@@ -33,7 +48,10 @@ function pivot(rows: unknown[][], xi: number, yi: number, si: number | null) {
   return { cats, series };
 }
 
-export function toEChartsOption(widget: Widget, columns: string[], rows: unknown[][]): EChartsOption | null {
+export type ChartOptions = { color?: string };
+
+export function toEChartsOption(widget: Widget, columns: string[], rows: unknown[][],
+  opts: ChartOptions = {}): EChartsOption | null {
   const e = widget.encoding;
   const unit = e.unit ?? null;
   const tooltipFmt = (v: unknown) => formatValue(typeof v === "number" ? v : toNum(v), unit);
@@ -48,13 +66,21 @@ export function toEChartsOption(widget: Widget, columns: string[], rows: unknown
       const si = e.series ? index(columns, e.series, "series") : null;
       const { cats, series } = pivot(rows, xi, yi, si);
       const type = widget.type === "line" ? "line" : "bar";
+      const single = si === null;
+      const color = opts.color ?? PALETTE[0];
+      const max = Math.max(...series[0].data.map((v) => v ?? -Infinity));
+      const accent = single ? (type === "bar"
+        ? { itemStyle: { color: (p: any) => (p.value === max ? color : tint(color)) },
+            label: { show: true, position: "top", color: "#5a6478", fontSize: 11, formatter: (p: any) => formatValue(p.value, unit) } }
+        : { itemStyle: { color }, lineStyle: { color } }) : {};
       return {
         tooltip: { trigger: "axis", valueFormatter: tooltipFmt },
-        legend: si === null ? undefined : { data: series.map((s) => s.name), top: 0 },
-        grid: { left: 48, right: 16, top: si === null ? 16 : 32, bottom: 40, containLabel: true },
-        xAxis: { type: "category", data: cats },
-        yAxis: { type: "value", name: unit ?? undefined },
-        series: series.map((s) => ({ name: s.name, type, data: s.data,
+        legend: single ? undefined : { data: series.map((s) => s.name), top: 0, right: 0 },
+        grid: { left: 48, right: 16, top: single ? 40 : 52, bottom: 44, containLabel: true },
+        xAxis: { type: "category", data: cats, name: axisName(e.x), nameLocation: "middle", nameGap: 30,
+          nameTextStyle: { color: "#8a93a3" } },
+        yAxis: { type: "value", name: unit ?? axisName(e.y), nameTextStyle: { color: "#8a93a3", align: "left" } },
+        series: series.map((s) => ({ name: s.name, type, data: s.data, ...accent,
           ...(widget.type === "stacked_bar" ? { stack: "total" } : {}) })),
       } as EChartsOption;
     }

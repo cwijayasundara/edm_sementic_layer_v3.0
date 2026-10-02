@@ -107,6 +107,9 @@ class KpiService:
                 value = round(value * d.scale, 4)
             tile["value"] = value
             tile["status"] = "ok"
+            if isinstance(source := h.get("summary", {}).get("source"), str):
+                tile["source"] = source
         except (GatewayError, KeyError, IndexError, TypeError):
             tile.pop("value", None)
+            tile.pop("source", None)
         return tile

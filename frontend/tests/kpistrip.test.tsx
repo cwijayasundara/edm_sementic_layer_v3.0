@@ -12,6 +12,13 @@ describe("KpiStripView", () => {
     expect(screen.getByText("Unavailable")).toBeInTheDocument();
   });
 
+  it("captions an ok tile with the source that answered it", () => {
+    render(<KpiStripView state={{ kind: "ok", tiles: [
+      { label: "Late feeds", metric_id: "late_feeds", unit: "", status: "ok", value: 3, source: "feedhub" },
+    ] }} onRetry={vi.fn()} />);
+    expect(screen.getByText("FeedHub")).toBeInTheDocument();
+  });
+
   it("shows one notice with retry when the data service is down", () => {
     const retry = vi.fn();
     render(<KpiStripView state={{ kind: "error" }} onRetry={retry} />);

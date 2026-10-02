@@ -34,8 +34,20 @@ describe("AssistantPanel", () => {
     await userEvent.click(screen.getByRole("button", { name: "Ask" }));
     expect(await screen.findByText("EMEA has the most open breaks.")).toBeInTheDocument();
     expect(screen.getByText("Running metric open_breaks…")).toBeInTheDocument();
-    expect(screen.getByText(/metric · 1,280 tokens · 900 cached · ~\$0\.0123/)).toBeInTheDocument();
+    const details = screen.getByText(/metric · 1,280 tokens · 900 cached · ~\$0\.0123/).closest("details")!;
+    expect(details).not.toHaveAttribute("open");
+    await userEvent.click(screen.getByText("Run details"));
+    expect(details).toHaveAttribute("open");
     expect(onWidget).toHaveBeenCalledWith(expect.stringMatching(/:w1$/), widget, "Open breaks by region?");
+  });
+
+  it("renders the summary's markdown", async () => {
+    chat.mockImplementation(async function* () { yield { type: "summary", text: "**Vendor A** drives most conflicts." }; });
+    render(<AssistantPanel onWidget={vi.fn()} />);
+    await userEvent.type(screen.getByRole("textbox", { name: "Question" }), "Who?");
+    await userEvent.click(screen.getByRole("button", { name: "Ask" }));
+    expect((await screen.findByText("Vendor A")).tagName).toBe("STRONG");
+    expect(screen.queryByText(/\*\*/)).toBeNull();
   });
 
   it("shows the agent's fixed error text and nothing else", async () => {

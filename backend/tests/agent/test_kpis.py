@@ -46,6 +46,11 @@ def test_tile_value_is_last_cell_of_first_row():
     assert gw.calls[1][0] == "get_rows" and gw.calls[1][1]["limit"] == 1
 
 
+def test_ok_tile_names_the_source_that_answered_it():
+    gw = FakeGateway({"run_metric": summary(source="feedhub"), "get_rows": ROWS})
+    assert run(KpiService().tiles(USER, gw))[0]["source"] == "feedhub"
+
+
 def test_missing_row_or_error_is_unavailable_without_message():
     gw = FakeGateway({"run_metric": summary(), "get_rows": {**ROWS, "rows": []}})
     assert {t["status"] for t in run(KpiService().tiles(USER, gw))} == {"unavailable"}

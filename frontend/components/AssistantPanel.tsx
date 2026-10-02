@@ -1,6 +1,7 @@
 "use client";
-import { ArrowUp, Check, CircleCheck, Loader2, MessageSquareText, Square, ThumbsUp } from "lucide-react";
+import { ArrowUp, Check, ChevronRight, CircleCheck, Loader2, MessageSquareText, Square, ThumbsUp } from "lucide-react";
 import { useEffect, useReducer, useRef, useState } from "react";
+import { Markdown } from "@/components/Markdown";
 import { Button } from "@/components/ui/button";
 import { useSession } from "@/components/SessionProvider";
 import { Unauthorized, api } from "@/lib/api";
@@ -41,7 +42,7 @@ export function TurnView({ turn, onConfirm }: { turn: Turn; onConfirm?: (turn: T
       {streaming && turn.summary === undefined && turn.plan.length === 0 && (
         <p className="flex items-center gap-2 text-xs text-muted-foreground"><Loader2 className="size-3.5 animate-spin" aria-hidden />
           <span>Working…</span></p>)}
-      {turn.summary !== undefined && <p className="text-[0.9rem] leading-relaxed text-[var(--prism-ink)]">{turn.summary}</p>}
+      {turn.summary !== undefined && <Markdown text={turn.summary} className="text-[0.9rem] leading-relaxed text-[var(--prism-ink)]" />}
       {turn.status === "error" && <p role="alert" className="rounded-md bg-[#fbecef] px-3 py-2 text-sm text-[var(--prism-crimson)]">{turn.error}</p>}
       {turn.status === "stopped" && <p className="text-xs text-muted-foreground">Stopped</p>}
       {a?.confirmable && (a.state === "confirmed"
@@ -54,9 +55,13 @@ export function TurnView({ turn, onConfirm }: { turn: Turn; onConfirm?: (turn: T
             </Button>
             {a.state === "failed" && <p role="alert" className="text-xs text-[var(--prism-crimson)]">{CONFIRM_FAILED}</p>}
           </div>)}
-      {t && <p className="text-[11px] text-[#8a93a3]">
-        {t.path ?? "—"} · {nf.format(t.input_tokens + t.output_tokens)} tokens · {nf.format(t.cache_read_input_tokens)} cached · ~${t.cost_usd.toFixed(4)}
-      </p>}
+      {t && <details className="group text-[11px] text-[#8a93a3]">
+        <summary className="inline-flex cursor-pointer list-none items-center gap-0.5 rounded hover:text-[var(--prism-muted)] [&::-webkit-details-marker]:hidden">
+          <ChevronRight className="size-3 transition-transform group-open:rotate-90" aria-hidden />Run details</summary>
+        <p className="mt-1 pl-3.5">
+          {t.path ?? "—"} · {nf.format(t.input_tokens + t.output_tokens)} tokens · {nf.format(t.cache_read_input_tokens)} cached · ~${t.cost_usd.toFixed(4)}
+        </p>
+      </details>}
     </li>
   );
 }

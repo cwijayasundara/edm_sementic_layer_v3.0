@@ -11,7 +11,7 @@ import { ApiError, api } from "@/lib/api";
 import { type CanvasItem, canPin } from "@/lib/canvas";
 import { ChartError, kpiValue, toEChartsOption } from "@/lib/charts";
 import { formatValue } from "@/lib/format";
-import { SOURCES } from "@/lib/sources";
+import { SOURCES, sourceById } from "@/lib/sources";
 import type { ResultPage } from "@/lib/schemas";
 
 const Chart = dynamic(() => import("@/components/Chart").then((m) => m.Chart), { ssr: false });
@@ -37,7 +37,7 @@ export function WidgetBody({ item, page, height }: { item: CanvasItem; page: Res
   }
   let option = null;
   try {
-    option = toEChartsOption(widget, page.columns, page.rows);
+    option = toEChartsOption(widget, page.columns, page.rows, { color: sourceById(item.info?.source)?.hex });
   } catch (e) {
     if (!(e instanceof ChartError)) throw e;
   }

@@ -45,6 +45,24 @@ describe("toEChartsOption", () => {
     expect([o.visualMap.min, o.visualMap.max]).toEqual([1, 3]);
   });
 
+  it("names both axes from the encoding when there is no unit", () => {
+    const o = toEChartsOption(w("bar", { x: "vendor_id", y: "conflict_count" }), ["vendor_id", "conflict_count"], [["V_A", 1]]) as any;
+    expect([o.xAxis.name, o.yAxis.name]).toEqual(["Vendor ID", "Conflict count"]);
+  });
+
+  it("single-series bar: value labels, the source colour, and the top bar highlighted", () => {
+    const o = toEChartsOption(w("bar", { x: "region", y: "value" }), cols, rows, { color: "#2f8f83" }) as any;
+    const s = o.series[0];
+    expect(s.label.show).toBe(true);
+    expect(s.itemStyle.color({ value: 4 })).toBe("#2f8f83");
+    expect(s.itemStyle.color({ value: 2 })).not.toBe("#2f8f83");
+  });
+
+  it("multi-series bars keep the palette and no value labels", () => {
+    const o = toEChartsOption(w("stacked_bar", { x: "region", y: "value", series: "status" }), cols, rows, { color: "#2f8f83" }) as any;
+    expect(o.series.every((s: any) => s.itemStyle === undefined && s.label === undefined)).toBe(true);
+  });
+
   it("puts the unit on the value axis name", () => {
     const o = toEChartsOption(w("bar", { x: "region", y: "value", unit: "USD" }), cols, rows) as any;
     expect(o.yAxis.name).toBe("USD");
