@@ -3,10 +3,17 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 const chat = vi.hoisted(() => vi.fn());
-vi.mock("@/components/SessionProvider", () => ({ useSession: () => ({ call: (fn: (t: string) => unknown) => fn("T") }) }));
+const callImpl = vi.hoisted(() => ({ fn: null as null | ((fn: (t: string) => unknown) => unknown) }));
+vi.mock("@/components/SessionProvider", () => ({
+  useSession: () => ({ call: (fn: (t: string) => unknown) => (callImpl.fn ? callImpl.fn(fn) : fn("T")) }),
+}));
 vi.mock("@/lib/api", async (orig) => ({ ...(await orig<typeof import("@/lib/api")>()), api: { chat } }));
 
 import { AssistantPanel, planText } from "@/components/AssistantPanel";
+import { Unauthorized } from "@/lib/api";
+import { beforeEach } from "vitest";
+
+beforeEach(() => { callImpl.fn = null; chat.mockReset(); });
 
 const widget = { type: "widget" as const, widget: { id: "w1", type: "bar" as const, title: "T", handle: "r_aaaaaaaaaaaa",
   encoding: { x: "region", y: "value" } }, handle_info: { columns: ["region", "value"], row_count: 1, source: "cashrecon",
@@ -56,5 +63,50 @@ describe("AssistantPanel", () => {
 
   it("formats plan steps", () => {
     expect(planText({ type: "plan", tool: "combine", label: "combine" })).toBe("Combining results…");
+  });
+
+  it("allows asking again right after Stop and ignores late widgets of the aborted stream", async () => {
+    chat.mockImplementationOnce(async function* (_t: string, _q: string, signal: AbortSignal) {
+      yield { type: "plan", tool: "query_source", label: "query cashrecon" };
+      await new Promise<void>((resolve) => signal.addEventListener("abort", () => resolve()));
+      yield widget;
+    });
+    chat.mockImplementationOnce(async function* () {
+      yield { type: "summary", text: "Second answer." };
+    });
+    const onWidget = vi.fn();
+    render(<AssistantPanel onWidget={onWidget} />);
+    const box = screen.getByRole("textbox", { name: "Question" });
+    await userEvent.type(box, "first");
+    await userEvent.click(screen.getByRole("button", { name: "Ask" }));
+    await screen.findByText("Querying cashrecon…");
+    await userEvent.click(screen.getByRole("button", { name: "Stop" }));
+    await userEvent.type(box, "second");
+    await userEvent.click(screen.getByRole("button", { name: "Ask" }));
+    expect(await screen.findByText("Second answer.")).toBeInTheDocument();
+    expect(screen.getByText("Stopped")).toBeInTheDocument();
+    expect(chat).toHaveBeenCalledTimes(2);
+    expect(onWidget).not.toHaveBeenCalled();
+  });
+
+  it("shows the fixed fallback text when the stream throws a non-abort error", async () => {
+    chat.mockImplementation(async function* () {
+      throw new Error("boom internal detail");
+    });
+    render(<AssistantPanel onWidget={vi.fn()} />);
+    await userEvent.type(screen.getByRole("textbox", { name: "Question" }), "q");
+    await userEvent.click(screen.getByRole("button", { name: "Ask" }));
+    expect(await screen.findByText("The assistant is not reachable. Please try again.")).toBeInTheDocument();
+    expect(screen.queryByText(/boom/)).not.toBeInTheDocument();
+  });
+
+  it("renders no error text when the session rejects with Unauthorized", async () => {
+    callImpl.fn = () => Promise.reject(new Unauthorized());
+    render(<AssistantPanel onWidget={vi.fn()} />);
+    await userEvent.type(screen.getByRole("textbox", { name: "Question" }), "q");
+    await userEvent.click(screen.getByRole("button", { name: "Ask" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Ask" })).toBeDisabled());
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.queryByText("The assistant is not reachable. Please try again.")).not.toBeInTheDocument();
   });
 });

@@ -61,7 +61,7 @@ export function AssistantPanel({ onWidget }: { onWidget: (key: string, event: Wi
       if (ctrl.signal.aborted) dispatch({ type: "stop", id });
       else if (!(e instanceof Unauthorized)) dispatch({ type: "failed", id, message: FAILED });
     } finally {
-      active.current = null;
+      if (active.current?.id === id) active.current = null;
     }
   }
 
@@ -69,6 +69,7 @@ export function AssistantPanel({ onWidget }: { onWidget: (key: string, event: Wi
     const a = active.current;
     if (!a) return;
     a.ctrl.abort();
+    active.current = null;
     dispatch({ type: "stop", id: a.id });
   }
 
