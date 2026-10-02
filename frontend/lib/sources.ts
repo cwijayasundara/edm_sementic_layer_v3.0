@@ -1,11 +1,12 @@
 /** The five platforms behind Prism. `color` is a CSS variable so the login diagram and header agree; `hex` is the same
- *  colour for canvas charts, which cannot read CSS variables (keep it in step with globals.css). */
+ *  colour for canvas charts, which cannot read CSS variables (keep it in step with globals.css). `access` is how its
+ *  MCP server reaches it (backend prism.mcp.servers.REST_SOURCES). */
 export const SOURCES = [
-  { id: "refmaster", name: "RefMaster", what: "Securities and legal entities", color: "var(--src-refmaster)", hex: "#3d6fb6" },
-  { id: "marketmaster", name: "MarketMaster", what: "Prices and vendor conflicts", color: "var(--src-marketmaster)", hex: "#7a5195" },
-  { id: "cashrecon", name: "CashRecon", what: "Cash breaks and matching", color: "var(--src-cashrecon)", hex: "#2f8f83" },
-  { id: "assetrecon", name: "AssetRecon", what: "Positions, NAV and recon runs", color: "var(--src-assetrecon)", hex: "#d08a1c" },
-  { id: "feedhub", name: "FeedHub", what: "Bank and custodian feeds", color: "var(--src-feedhub)", hex: "#c2416b" },
+  { id: "refmaster", name: "RefMaster", what: "Securities and legal entities", color: "var(--src-refmaster)", hex: "#3d6fb6", access: "REST API" },
+  { id: "marketmaster", name: "MarketMaster", what: "Prices and vendor conflicts", color: "var(--src-marketmaster)", hex: "#7a5195", access: "REST API" },
+  { id: "cashrecon", name: "CashRecon", what: "Cash breaks and matching", color: "var(--src-cashrecon)", hex: "#2f8f83", access: "SQL database" },
+  { id: "assetrecon", name: "AssetRecon", what: "Positions, NAV and recon runs", color: "var(--src-assetrecon)", hex: "#d08a1c", access: "SQL database" },
+  { id: "feedhub", name: "FeedHub", what: "Bank and custodian feeds", color: "var(--src-feedhub)", hex: "#c2416b", access: "SQL database" },
 ] as const;
 
 export type SourceId = (typeof SOURCES)[number]["id"];

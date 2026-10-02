@@ -9,7 +9,7 @@ import { useSession } from "@/components/SessionProvider";
 import { ReasoningTimeline } from "@/components/ReasoningTimeline";
 import { ApiError, Unauthorized, api } from "@/lib/api";
 import { EXPIRED_TEXT } from "@/lib/copy";
-import { KIND_LABEL } from "@/lib/graph";
+import { KIND_LABEL, SHAPE_KEY, type SourceUse, originText, sourcesUsed } from "@/lib/graph";
 import { LINEAGE_KINDS, type Lineage, type Trace } from "@/lib/schemas";
 import { touchedIds } from "@/lib/trace";
 
@@ -43,6 +43,7 @@ export function ContextGraphDialog({ open, onOpenChange, handle, title, runId, i
   const [traceNonce, setTraceNonce] = useState(0);
   const [layout, setLayout] = useState(0);
   const [selected, setSelected] = useState<string | null>(null);
+  const [focusSource, setFocusSource] = useState<string | null>(null);
   // stable identity: a new Set each render would make the graph re-apply its option and restart the layout
   const highlight = useMemo(() => (traceLoad.kind === "ok" ? touchedIds(traceLoad.trace) : undefined), [traceLoad]);
 
@@ -53,6 +54,7 @@ export function ContextGraphDialog({ open, onOpenChange, handle, title, runId, i
     let cancelled = false;
     setLoad({ kind: "loading" });
     setSelected(null);
+    setFocusSource(null);
     callRef.current((t) => api.lineage(t, handle))
       .then((lineage) => { if (!cancelled) setLoad({ kind: "ok", lineage }); })
       .catch((e) => {
@@ -95,7 +97,7 @@ export function ContextGraphDialog({ open, onOpenChange, handle, title, runId, i
         {tab === "graph" && handle && (
           <div role="tabpanel" id="cg-panel-graph" aria-labelledby="cg-tab-graph">
             <Body load={load} layout={layout} selected={selected} onSelect={setSelected}
-              highlight={highlight}
+              highlight={highlight} focusSource={focusSource} onFocusSource={setFocusSource}
               onRetry={() => setNonce((n) => n + 1)} onReset={() => { setLayout((n) => n + 1); setSelected(null); }} />
           </div>)}
         {tab === "reasoning" && (
@@ -124,9 +126,9 @@ function Notice({ children }: { children: React.ReactNode }) {
   return <div className="grid min-h-[320px] place-items-center text-center text-sm text-muted-foreground"><div>{children}</div></div>;
 }
 
-function Body({ load, layout, selected, onSelect, highlight, onRetry, onReset }: {
+function Body({ load, layout, selected, onSelect, highlight, focusSource, onFocusSource, onRetry, onReset }: {
   load: Load; layout: number; selected: string | null; onSelect: (id: string) => void; highlight?: Set<string>;
-  onRetry: () => void; onReset: () => void;
+  focusSource: string | null; onFocusSource: (id: string | null) => void; onRetry: () => void; onReset: () => void;
 }) {
   if (load.kind === "loading") return <Skeleton className="h-[min(560px,60vh)] w-full" />;
   if (load.kind === "expired") return <Notice>{EXPIRED_TEXT}</Notice>;
@@ -139,6 +141,7 @@ function Body({ load, layout, selected, onSelect, highlight, onRetry, onReset }:
   const node = g.nodes.find((n) => n.id === selected);
   const labelOf = (id: string) => g.nodes.find((n) => n.id === id)?.label ?? id;
   const links = node ? g.edges.filter((e) => e.from === node.id || e.to === node.id) : [];
+  const uses = sourcesUsed(g);
   return (
     <div className="space-y-3">
       {(!g.governed || g.truncated) && (
@@ -146,24 +149,28 @@ function Body({ load, layout, selected, onSelect, highlight, onRetry, onReset }:
           {!g.governed && <span className="rounded bg-[var(--prism-paper)] px-2 py-1">{NOT_GOVERNED}</span>}
           {g.truncated && <span className="rounded bg-[var(--prism-paper)] px-2 py-1">{SHORTENED}</span>}
         </div>)}
+      {uses.length > 0 && <SourceStrip uses={uses} focus={focusSource} onFocus={onFocusSource} />}
       <div className="grid gap-3 lg:grid-cols-[1fr_18rem]">
         <div className="relative rounded-lg border bg-[#fbfcfd]">
           <Button size="sm" variant="outline" className="absolute top-2 left-2 z-10" onClick={onReset}>
             <RotateCcw aria-hidden />Reset layout</Button>
-          <ContextGraph key={layout} lineage={g} onSelect={onSelect} highlight={highlight} height="min(560px, 60vh)" />
+          <ContextGraph key={layout} lineage={g} onSelect={onSelect} highlight={highlight} focusSource={focusSource}
+            height="min(560px, 60vh)" />
         </div>
         <aside className="rounded-lg border p-3 text-sm" aria-label="Node details">
           {node ? (
             <div className="space-y-2">
-              <p className="text-xs font-medium text-muted-foreground">{KIND_LABEL[node.kind]}{node.source ? ` · ${node.source}` : ""}</p>
+              <p className="text-xs font-medium text-muted-foreground">{KIND_LABEL[node.kind]}</p>
               <p className="font-semibold break-words text-[var(--prism-ink)]">{node.label}</p>
+              <p className="text-xs">{originText(node, uses)}</p>
               {node.detail && <p className="break-words text-muted-foreground">{node.detail}</p>}
               {links.length > 0 && <ul className="space-y-1 border-t pt-2 text-xs">
                 {links.map((e) => <li key={`${e.from}|${e.type}|${e.to}`} className="break-words">
                   {e.from === node.id ? `${e.type} → ${labelOf(e.to)}` : `${labelOf(e.from)} → ${e.type}`}</li>)}
               </ul>}
             </div>
-          ) : <p className="text-muted-foreground">Select a node to see what it is and how it connects.</p>}
+          ) : <p className="text-muted-foreground">Select a node to see what it is, where it came from and how it connects.</p>}
+          <ShapeKey />
         </aside>
       </div>
       <details className="rounded-lg border px-3 py-2 text-sm">
@@ -173,11 +180,58 @@ function Body({ load, layout, selected, onSelect, highlight, onRetry, onReset }:
             <section key={k}>
               <h4 className="text-xs font-medium text-muted-foreground">{KIND_LABEL[k]}</h4>
               <ul className="mt-1 space-y-0.5">
-                {g.nodes.filter((n) => n.kind === k).map((n) => <li key={n.id} className="break-words">{n.label}</li>)}
+                {g.nodes.filter((n) => n.kind === k).map((n) => <li key={n.id} className="break-words">{n.label}
+                  <span className="text-xs text-muted-foreground"> · {originText(n, uses).replace(/^From /, "")}</span></li>)}
               </ul>
             </section>))}
         </div>
       </details>
+    </div>
+  );
+}
+
+/** The source systems the answer drew on; a chip emphasises that system's nodes in the graph. */
+function SourceStrip({ uses, focus, onFocus }:
+  { uses: SourceUse[]; focus: string | null; onFocus: (id: string | null) => void }) {
+  return (
+    <div className="flex flex-wrap items-center gap-2 text-xs" aria-label="Data sources">
+      <span className="font-medium text-muted-foreground">
+        {uses.length === 1 ? "Data from 1 source system:" : `Data from ${uses.length} source systems:`}</span>
+      {uses.map((u) => (
+        <button key={u.id} type="button" aria-pressed={focus === u.id}
+          title={focus === u.id ? "Show all sources" : `Show only what came from ${u.name}`} onClick={() => onFocus(focus === u.id ? null : u.id)}
+          className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 ${
+            focus === u.id ? "border-[var(--prism-navy)] bg-[var(--prism-paper)]" : "bg-background"}`}>
+          <span className="size-2.5 rounded-full" style={{ background: u.hex }} aria-hidden />
+          <span className="font-medium text-[var(--prism-ink)]">{u.name}</span>
+          {u.access.length > 0 && <span className="text-muted-foreground">· {u.access.join(" + ")}</span>}
+          <span className="text-muted-foreground">· {u.count} {u.count === 1 ? "node" : "nodes"}</span>
+        </button>))}
+    </div>
+  );
+}
+
+const SHAPE_PATH: Record<string, React.ReactNode> = {
+  circle: <circle cx="6" cy="6" r="5" />,
+  roundRect: <rect x="1" y="2" width="10" height="8" rx="2.5" />,
+  rect: <rect x="1.5" y="1.5" width="9" height="9" />,
+  triangle: <path d="M6 1 L11 11 L1 11 Z" />,
+  diamond: <path d="M6 0.5 L11.5 6 L6 11.5 L0.5 6 Z" />,
+  pin: <path d="M6 11.5 C6 11.5 1.5 7 1.5 4.5 A4.5 4.5 0 0 1 10.5 4.5 C10.5 7 6 11.5 6 11.5 Z" />,
+};
+
+/** Colour is the source system, so the node kind is read from its shape. */
+function ShapeKey() {
+  return (
+    <div className="mt-3 border-t pt-2 text-xs text-muted-foreground">
+      <p className="mb-1 font-medium">Shapes</p>
+      <ul className="space-y-0.5">
+        {SHAPE_KEY.map(({ shape, kinds }) => (
+          <li key={shape} className="flex items-center gap-1.5">
+            <svg viewBox="0 0 12 12" className="size-3 fill-current" aria-hidden>{SHAPE_PATH[shape]}</svg>
+            {kinds.map((k) => KIND_LABEL[k]).join(", ")}</li>))}
+      </ul>
+      <p className="mt-1">Colour shows the source system.</p>
     </div>
   );
 }

@@ -3,8 +3,11 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const seen = vi.hoisted(() => [] as unknown[]);
-vi.mock("next/dynamic", () => ({ default: () => (p: { onSelect: (id: string) => void; highlight?: Set<string> }) => {
+const focused = vi.hoisted(() => [] as unknown[]);
+vi.mock("next/dynamic", () => ({ default: () => (p: { onSelect: (id: string) => void; highlight?: Set<string>;
+  focusSource?: string | null }) => {
   seen.push(p.highlight);
+  focused.push(p.focusSource);
   return <button type="button" data-testid="graph" onClick={() => p.onSelect("metric:open_breaks")}>graph</button>;
 } }));
 const lineage = vi.hoisted(() => vi.fn());
@@ -32,7 +35,7 @@ const T_MIN = Trace.parse({ run_id: "a".repeat(32), question: "q", answer: "A.",
       error_code: null, tool: null, args: null, handle: null, rows: null, truncated: null, touched: [] },
   ] });
 
-beforeEach(() => { lineage.mockReset(); trace.mockReset(); seen.length = 0; });
+beforeEach(() => { lineage.mockReset(); trace.mockReset(); seen.length = 0; focused.length = 0; });
 
 describe("ContextGraphDialog", () => {
   it("loads the lineage of the handle and lists nodes by kind", async () => {
@@ -42,6 +45,20 @@ describe("ContextGraphDialog", () => {
     expect(lineage).toHaveBeenCalledWith("T", "r_aaaaaaaaaaaa");
     await userEvent.click(screen.getByText("List view"));
     expect(screen.getByText("cashrecon")).toBeInTheDocument();
+  });
+
+  it("names the source systems behind the result and focuses one from its chip", async () => {
+    lineage.mockResolvedValueOnce(G);
+    open();
+    await screen.findByTestId("graph");
+    expect(screen.getByText("Data from 1 source system:")).toBeInTheDocument();
+    const chip = screen.getByRole("button", { name: /CashRecon/ });
+    expect(chip).toHaveTextContent("CashRecon· SQL database· 1 node");
+    await userEvent.click(chip);
+    expect(chip).toHaveAttribute("aria-pressed", "true");
+    expect(focused.at(-1)).toBe("cashrecon");
+    await userEvent.click(chip);
+    expect(focused.at(-1)).toBeNull();
   });
 
   it("keeps the dialog within the viewport and scrollable", async () => {
@@ -60,6 +77,7 @@ describe("ContextGraphDialog", () => {
     await userEvent.click(await screen.findByTestId("graph"));
     expect(screen.getByText("Open cash breaks")).toBeInTheDocument();
     expect(screen.getByText(/PROVIDES/)).toBeInTheDocument();
+    expect(screen.getByText("From Prism knowledge")).toBeInTheDocument();
   });
 
   it("notes free-form and shortened graphs", async () => {
