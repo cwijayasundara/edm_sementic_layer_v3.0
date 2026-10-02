@@ -45,6 +45,9 @@ export const api = {
     const q = new URLSearchParams({ offset: String(offset), limit: String(limit) });
     return ResultPage.parse(await json(await request(`/results/${encodeURIComponent(handle)}?${q}`, { token })));
   },
+  async confirm(token: string, recordId: string): Promise<void> {
+    await request(`/answers/${encodeURIComponent(recordId)}/confirm`, { token, method: "POST" });
+  },
   async *chat(token: string, question: string, signal: AbortSignal): AsyncGenerator<ChatEvent> {
     const res = await request("/chat", { token, method: "POST", body: { question }, signal });
     if (!res.body) throw new ApiError(0);

@@ -49,14 +49,16 @@ export const TelemetryEvent = z.object({
   tool_calls: z.number(), tool_latency_ms: z.number(), cost_usd: z.number(),
 });
 export const ErrorEvent = z.object({ type: z.literal("error"), code: z.string(), message: z.string() });
-export const ChatEvent = z.discriminatedUnion("type", [PlanEvent, WidgetEvent, SummaryEvent, TelemetryEvent, ErrorEvent]);
+export const AnswerEvent = z.object({ type: z.literal("answer"), record_id: z.string().uuid(), confirmable: z.boolean() });
+export const ChatEvent = z.discriminatedUnion("type", [PlanEvent, WidgetEvent, SummaryEvent, AnswerEvent, TelemetryEvent, ErrorEvent]);
 export type PlanEvent = z.infer<typeof PlanEvent>;
 export type WidgetEvent = z.infer<typeof WidgetEvent>;
 export type SummaryEvent = z.infer<typeof SummaryEvent>;
+export type AnswerEvent = z.infer<typeof AnswerEvent>;
 export type TelemetryEvent = z.infer<typeof TelemetryEvent>;
 export type ErrorEvent = z.infer<typeof ErrorEvent>;
 export type ChatEvent = z.infer<typeof ChatEvent>;
-export const CHAT_EVENT_TYPES = new Set(["plan", "widget", "summary", "telemetry", "error"]);
+export const CHAT_EVENT_TYPES = new Set(["plan", "widget", "summary", "answer", "telemetry", "error"]);
 
 export const KpiTile = z.object({
   label: z.string(), metric_id: z.string(), unit: z.string().default(""),

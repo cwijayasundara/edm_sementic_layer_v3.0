@@ -3,16 +3,17 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const chat = vi.hoisted(() => vi.fn());
+const confirm = vi.hoisted(() => vi.fn());
 const callImpl = vi.hoisted(() => ({ fn: null as null | ((fn: (t: string) => unknown) => unknown) }));
 vi.mock("@/components/SessionProvider", () => ({
   useSession: () => ({ call: (fn: (t: string) => unknown) => (callImpl.fn ? callImpl.fn(fn) : fn("T")) }),
 }));
-vi.mock("@/lib/api", async (orig) => ({ ...(await orig<typeof import("@/lib/api")>()), api: { chat } }));
+vi.mock("@/lib/api", async (orig) => ({ ...(await orig<typeof import("@/lib/api")>()), api: { chat, confirm } }));
 
 import { AssistantPanel, planText } from "@/components/AssistantPanel";
-import { Unauthorized } from "@/lib/api";
+import { ApiError, Unauthorized } from "@/lib/api";
 
-beforeEach(() => { callImpl.fn = null; chat.mockReset(); });
+beforeEach(() => { callImpl.fn = null; chat.mockReset(); confirm.mockReset(); });
 
 const widget = { type: "widget" as const, widget: { id: "w1", type: "bar" as const, title: "T", handle: "r_aaaaaaaaaaaa",
   encoding: { x: "region", y: "value" } }, handle_info: { columns: ["region", "value"], row_count: 1, source: "cashrecon",
@@ -110,5 +111,48 @@ describe("AssistantPanel", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: "Ask" })).toBeDisabled());
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     expect(screen.queryByText("The assistant is not reachable. Please try again.")).not.toBeInTheDocument();
+  });
+});
+
+const RID = "0b8f3c1e-2d4a-4c6b-9e7f-1a2b3c4d5e6f";
+async function askWithAnswer(confirmable: boolean) {
+  chat.mockImplementation(async function* () {
+    yield { type: "summary", text: "Done." };
+    yield { type: "answer", record_id: RID, confirmable };
+  });
+  render(<AssistantPanel onWidget={vi.fn()} />);
+  await userEvent.type(screen.getByRole("textbox", { name: "Question" }), "q");
+  await userEvent.click(screen.getByRole("button", { name: "Ask" }));
+  await screen.findByText("Done.");
+}
+
+describe("confirming an answer", () => {
+  it("confirms a confirmable answer once and shows Confirmed", async () => {
+    let finish!: () => void;
+    confirm.mockImplementation(() => new Promise<void>((r) => { finish = r; }));
+    await askWithAnswer(true);
+    const btn = screen.getByRole("button", { name: "Confirm this answer" });
+    await userEvent.click(btn);
+    expect(btn).toBeDisabled();
+    await userEvent.click(btn);
+    finish();
+    expect(await screen.findByText("Confirmed")).toBeInTheDocument();
+    expect(confirm).toHaveBeenCalledTimes(1);
+    expect(confirm).toHaveBeenCalledWith("T", RID);
+    expect(screen.queryByRole("button", { name: "Confirm this answer" })).not.toBeInTheDocument();
+  });
+
+  it("shows fixed text when confirming fails and allows a retry", async () => {
+    confirm.mockRejectedValueOnce(new ApiError(502)).mockResolvedValueOnce(undefined);
+    await askWithAnswer(true);
+    await userEvent.click(screen.getByRole("button", { name: "Confirm this answer" }));
+    expect(await screen.findByText("Could not confirm this answer.")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Confirm this answer" }));
+    expect(await screen.findByText("Confirmed")).toBeInTheDocument();
+  });
+
+  it("shows no confirm control for an answer that is not confirmable", async () => {
+    await askWithAnswer(false);
+    expect(screen.queryByRole("button", { name: "Confirm this answer" })).not.toBeInTheDocument();
   });
 });

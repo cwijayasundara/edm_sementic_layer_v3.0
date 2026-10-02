@@ -61,3 +61,12 @@ describe("parseFrame", () => {
     expect(parseFrame("")).toBeNull();
   });
 });
+
+describe("answer event", () => {
+  it("parses the answer event", () => {
+    const rid = "0b8f3c1e-2d4a-4c6b-9e7f-1a2b3c4d5e6f";
+    expect(parseFrame(`event: answer\ndata: {"type":"answer","record_id":"${rid}","confirmable":true}`))
+      .toEqual({ type: "answer", record_id: rid, confirmable: true });
+    expect(parseFrame(`event: answer\ndata: {"type":"answer","record_id":"nope","confirmable":true}`)).toEqual(MALFORMED);
+  });
+});

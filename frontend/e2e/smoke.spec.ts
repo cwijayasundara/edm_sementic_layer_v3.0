@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { KPIS, TOKEN, WIDGET, chatBody, rows } from "./fixtures";
+import { KPIS, RECORD_ID, TOKEN, WIDGET, chatBody, rows } from "./fixtures";
 
 const AGENT = process.env.NEXT_PUBLIC_AGENT_URL ?? "http://localhost:8000";
 
@@ -11,6 +11,7 @@ test.describe("mocked agent", () => {
     const fetched: string[] = [];
     let asks = 0;
     let runCalls = 0;
+    let confirms = 0;
     await page.route(`${AGENT}/**`, async (route) => {
       const req = route.request();
       const url = new URL(req.url());
@@ -37,6 +38,10 @@ test.describe("mocked agent", () => {
           widget: { ...WIDGET, handle }, status: "ok", handle_info: { columns: ["region", "value"],
             row_count: 60, source: "cashrecon", metric_id: "open_breaks", recipe: saved[0].items[i].recipe } })) });
       }
+      if (url.pathname === `/answers/${RECORD_ID}/confirm` && req.method() === "POST") {
+        confirms++;
+        return route.fulfill({ status: 204, body: "", headers: { "access-control-allow-origin": "http://localhost:3000" } });
+      }
       return json({ detail: "not found" }, 404);
     });
 
@@ -49,6 +54,9 @@ test.describe("mocked agent", () => {
     await page.getByRole("button", { name: "Ask" }).click();
     await expect(page.getByText("EMEA has the most open breaks.")).toBeVisible();
     await expect(page.getByText("Running metric open_breaks…")).toBeVisible();
+    await page.getByRole("button", { name: "Confirm this answer" }).first().click();
+    await expect(page.getByText("Confirmed").first()).toBeVisible();
+    expect(confirms).toBe(1);
     const card = page.getByRole("region", { name: "Canvas" }).locator("div").filter({ hasText: "Open breaks by region" }).first();
     await expect(card.locator("canvas").first()).toBeVisible();
 

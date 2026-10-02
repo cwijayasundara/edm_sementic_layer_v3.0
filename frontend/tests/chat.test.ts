@@ -51,3 +51,20 @@ describe("chatReducer", () => {
     expect(turns.map((t) => [t.id, t.status, t.summary])).toEqual([["t1", "stopped", undefined], ["t2", "streaming", "fresh"]]);
   });
 });
+
+describe("confirm", () => {
+  it("keeps the answer and applies confirm actions even after the turn is done", () => {
+    const rid = "0b8f3c1e-2d4a-4c6b-9e7f-1a2b3c4d5e6f";
+    let s = chatReducer([], { type: "start", id: "t1", question: "q" });
+    s = chatReducer(s, { type: "event", id: "t1", event: { type: "summary", text: "x" } });
+    s = chatReducer(s, { type: "event", id: "t1", event: { type: "answer", record_id: rid, confirmable: true } });
+    s = chatReducer(s, { type: "ended", id: "t1" });
+    expect(s[0].status).toBe("done");
+    expect(s[0].answer).toEqual({ recordId: rid, confirmable: true, state: "idle" });
+    s = chatReducer(s, { type: "confirm", id: "t1", state: "sending" });
+    s = chatReducer(s, { type: "confirm", id: "t1", state: "confirmed" });
+    expect(s[0].answer?.state).toBe("confirmed");
+    const none = chatReducer(chatReducer([], { type: "start", id: "t2", question: "q" }), { type: "confirm", id: "t2", state: "sending" });
+    expect(none[0].answer).toBeUndefined();
+  });
+});

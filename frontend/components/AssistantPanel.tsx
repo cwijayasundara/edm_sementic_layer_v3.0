@@ -1,4 +1,5 @@
 "use client";
+import { ThumbsUp } from "lucide-react";
 import { useReducer, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useSession } from "@/components/SessionProvider";
@@ -8,6 +9,7 @@ import type { PlanEvent, WidgetEvent } from "@/lib/schemas";
 
 export const MAX_QUESTION = 2000;
 const FAILED = "The assistant is not reachable. Please try again.";
+const CONFIRM_FAILED = "Could not confirm this answer.";
 const nf = new Intl.NumberFormat("en-US");
 
 export function planText(p: PlanEvent): string {
@@ -16,8 +18,9 @@ export function planText(p: PlanEvent): string {
   return "Combining results…";
 }
 
-export function TurnView({ turn }: { turn: Turn }) {
+export function TurnView({ turn, onConfirm }: { turn: Turn; onConfirm?: (turn: Turn) => void }) {
   const t = turn.telemetry;
+  const a = turn.answer;
   return (
     <li className="space-y-1 border-b pb-3">
       <p className="font-medium">{turn.question}</p>
@@ -26,6 +29,15 @@ export function TurnView({ turn }: { turn: Turn }) {
       {turn.summary !== undefined && <p className="text-sm">{turn.summary}</p>}
       {turn.status === "error" && <p role="alert" className="text-sm text-[var(--prism-crimson)]">{turn.error}</p>}
       {turn.status === "stopped" && <p className="text-xs text-muted-foreground">Stopped</p>}
+      {a?.confirmable && (a.state === "confirmed"
+        ? <p className="text-xs text-muted-foreground">Confirmed</p>
+        : <div className="flex items-center gap-2">
+            <Button type="button" variant="outline" size="sm" aria-label="Confirm this answer"
+              disabled={a.state === "sending"} onClick={() => onConfirm?.(turn)}>
+              <ThumbsUp aria-hidden /> Correct? Confirm
+            </Button>
+            {a.state === "failed" && <p role="alert" className="text-xs text-[var(--prism-crimson)]">{CONFIRM_FAILED}</p>}
+          </div>)}
       {t && <p className="text-[11px] text-muted-foreground">
         {t.path ?? "—"} · {nf.format(t.input_tokens + t.output_tokens)} tokens · {nf.format(t.cache_read_input_tokens)} cached · ~${t.cost_usd.toFixed(4)}
       </p>}
@@ -65,6 +77,18 @@ export function AssistantPanel({ onWidget }: { onWidget: (key: string, event: Wi
     }
   }
 
+  async function confirmTurn(turn: Turn) {
+    const a = turn.answer;
+    if (!a?.confirmable || a.state === "sending" || a.state === "confirmed") return;
+    dispatch({ type: "confirm", id: turn.id, state: "sending" });
+    try {
+      await call((token) => api.confirm(token, a.recordId));
+      dispatch({ type: "confirm", id: turn.id, state: "confirmed" });
+    } catch (e) {
+      if (!(e instanceof Unauthorized)) dispatch({ type: "confirm", id: turn.id, state: "failed" });
+    }
+  }
+
   function stop() {
     const a = active.current;
     if (!a) return;
@@ -76,7 +100,7 @@ export function AssistantPanel({ onWidget }: { onWidget: (key: string, event: Wi
   const busy = turns.some((t) => t.status === "streaming");
   return (
     <div className="flex h-full flex-col gap-3">
-      <ol className="flex-1 space-y-3 overflow-y-auto">{turns.map((t) => <TurnView key={t.id} turn={t} />)}</ol>
+      <ol className="flex-1 space-y-3 overflow-y-auto">{turns.map((t) => <TurnView key={t.id} turn={t} onConfirm={confirmTurn} />)}</ol>
       <form className="space-y-2" onSubmit={(e) => { e.preventDefault(); void ask(); }}>
         <textarea aria-label="Question" className="w-full rounded-md border p-2 text-sm" rows={3}
           maxLength={MAX_QUESTION} value={question} placeholder="Ask about your data…"

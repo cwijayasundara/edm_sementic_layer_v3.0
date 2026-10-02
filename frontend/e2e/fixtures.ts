@@ -8,6 +8,7 @@ export const KPIS = { tiles: [
   { label: "Auto-match rate", metric_id: "auto_match_rate", unit: "%", status: "ok", value: 91.2 },
 ] };
 
+export const RECORD_ID = "11111111-1111-4111-8111-111111111111";
 export const RECIPE = { tool: "run_metric", args: { metric_id: "open_breaks", dimensions: ["region"], filters: {}, limit: null } };
 export const WIDGET = { id: "w1", type: "bar", title: "Open breaks by region", handle: "r_aaaaaaaaaaaa",
   encoding: { x: "region", y: "value", series: null, value: null, unit: null } };
@@ -18,6 +19,7 @@ export const chatBody = (handle: string) => [
   frame({ type: "widget", widget: { ...WIDGET, handle }, handle_info: { columns: ["region", "value"], row_count: 60,
     source: "cashrecon", metric_id: "open_breaks", recipe: RECIPE } }),
   frame({ type: "summary", text: "EMEA has the most open breaks." }),
+  frame({ type: "answer", record_id: RECORD_ID, confirmable: true }),
   frame({ type: "telemetry", run_id: "r1", path: "metric", models: ["m"], input_tokens: 1000, output_tokens: 100,
     cache_read_input_tokens: 800, llm_turns: 2, tool_calls: 2, tool_latency_ms: 20, cost_usd: 0.01 }),
 ].join("");
