@@ -3,6 +3,7 @@ import random
 from datetime import date, timedelta
 
 from prism.sim.calendar import at
+from prism.sim.canaries import plant_canaries
 from prism.sim.keys import statement_format
 from prism.sim.model import TableData, id_sequence
 from prism.sim.universe import CashAccount, Universe
@@ -50,6 +51,7 @@ def project_cashrecon(u: Universe) -> dict[str, TableData]:
                                        a.nostro_no, a.ccy, a.region)
         _account_activity(rng, u, a, t, nid)
     _usd_break_story(rng, u, t, nid)
+    plant_canaries(u, t, nid)   # last: no RNG draws after this
     return t
 
 
