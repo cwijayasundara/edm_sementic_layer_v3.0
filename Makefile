@@ -1,4 +1,4 @@
-.PHONY: test test-fast test-mcp test-graph test-gateway test-live seed reseed db models graph distill gateway agent clean-test-dbs
+.PHONY: test test-fast test-mcp test-graph test-gateway test-live seed reseed db models graph distill gateway agent clean-test-dbs frontend test-ui e2e
 
 # Databases the test suite creates under its own prefixes (backend/tests/db_cleanup.py); never test_* or real ones.
 TEST_DB_REGEX = ^(testapp|testappnew|testmig|testhist|testhistcli)_
@@ -57,3 +57,14 @@ clean-test-dbs: db
 	  echo "dropping $$name"; \
 	  docker compose exec -T postgres psql -U postgres -q -c "DROP DATABASE IF EXISTS \"$$name\" WITH (FORCE)" < /dev/null || exit 1; \
 	done
+
+# The UI on :3000 (scripts/start_frontend.sh); talks to the agent at NEXT_PUBLIC_AGENT_URL (default :8000).
+frontend:
+	scripts/start_frontend.sh
+
+test-ui:
+	cd frontend && npm run lint && npm run typecheck && npm test
+
+# Playwright smoke against a mocked agent (no stack, no API key). PRISM_E2E_LIVE=1 adds the live login + KPI check.
+e2e:
+	cd frontend && npx playwright install chromium && npm run e2e

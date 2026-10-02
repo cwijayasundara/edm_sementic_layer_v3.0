@@ -49,3 +49,7 @@ docs/superpowers/spikes/**/*_output.txt
 .envrc
 *.pem
 *.key
+
+# Frontend test artefacts
+frontend/test-results/
+frontend/playwright-report/
