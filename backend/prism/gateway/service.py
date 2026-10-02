@@ -1,4 +1,4 @@
-"""The Semantic Gateway's six tools, independent of the MCP transport (prism.gateway.server wires them up).
+"""The Semantic Gateway's seven tools, independent of the MCP transport (prism.gateway.server wires them up).
 
 `Gateway.call_tool(name, claims, arguments)` is the single entry point. `claims` are the VERIFIED token claims (the
 caller's identity never comes from tool arguments). Every call, including unknown tools, invalid arguments, refusals,
@@ -7,14 +7,14 @@ carries catalog names only: a metric id / dimension list / source appear only on
 handle only once the store returned it, and the question only as its HMAC (audit_hmac_key), computed here so the raw
 text never reaches the audit path (record_answer hands it to the query log, which keeps it only if store_questions).
 
-record_answer trust: `verified` from the agent is a REQUEST only. The gateway stores verified=true only when the
-caller passed >= 1 handle, every handle is its own and still live (a handle exists only for a call that succeeded, so
-the underlying runs were ok) and EVERY handle resolves to catalog metrics (a run_metric result, or a combine whose
-inputs all do and are still stored; a query_source result never does); otherwise the row is stored with
-verified=false (never an empty-metric verified row). record_answer is rate-limited per caller. The metric ids and dimensions always come from the
-handles, never from the caller. A human-confirmed path (UI thumbs-up) is Plan 4; until then Task 9's distiller must
-treat verified as "agent-claimed, metric-backed", not as human-confirmed. A dropped insert is reported
-(`record_failed`), never answered with recorded=true.
+record_answer / confirm_answer trust: record_answer always stores verified=false. It stores metric_backed=true only
+when the caller passed >= 1 handle, every handle is its own and still live, and EVERY handle resolves to catalog
+metrics (a run_metric result, or a combine whose inputs all do and are still stored; a query_source result never
+does). It returns a fresh record_id. confirm_answer(record_id) is the human confirmation (the UI's thumbs-up through
+the agent): it sets verified=true only on the caller's own metric-backed, ok row, answers not_confirmable for every
+other case (never saying which), and needs no live handle. Both are rate-limited per caller. The metric ids and
+dimensions always come from the handles, never from the caller. A dropped insert is reported (`record_failed`), never
+answered with recorded=true.
 
 Errors come back as an `is_error` result `Error executing tool <name>: <code>: <message>`, where the message is a
 GatewayError's caller-safe text; anything else becomes `internal_error` with a reference logged server-side (exception
@@ -34,9 +34,9 @@ from typing import Annotated, Any
 
 import anyio
 from mcp.types import CallToolResult, TextContent
-from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, StrictInt, ValidationError
 
-from prism.gateway.audit import question_hash, valid_caller_id
+from prism.gateway.audit import RECORD_ID, AuditUnavailable, question_hash, valid_caller_id
 from prism.gateway.combine import MAX_SQL_CHARS
 from prism.gateway.combine import combine as combine_results
 from prism.gateway.errors import GatewayError
@@ -48,7 +48,7 @@ from prism.graph.retrieval import GraphError, GraphUnavailable
 
 log = logging.getLogger("prism.gateway")
 
-TOOLS = ("search_context", "run_metric", "query_source", "get_rows", "combine", "record_answer")
+TOOLS = ("search_context", "run_metric", "query_source", "get_rows", "combine", "record_answer", "confirm_answer")
 MAX_QUESTION_CHARS = 2000
 MAX_PLAN_CHARS = 4000
 MAX_ITEMS = 20
@@ -129,14 +129,17 @@ class RecordAnswerArgs(_Args):
     handles: Annotated[list[Annotated[str, Field(min_length=1, max_length=64)]],
                        Field(min_length=1, max_length=MAX_RECORD_HANDLES,
                              description="Your own live result handles the answer used (at least one)")]
-    verified: Annotated[StrictBool, Field(description=(
-        "Request only: true when the user confirmed the answer. Stored as true only when a governed metric "
-        "backs the handles; the human-confirmed path is a later UI feature"))]
+
+
+class ConfirmAnswerArgs(_Args):
+    record_id: Annotated[str, Field(pattern=f"^{RECORD_ID.pattern}$",
+                                    description="The record_id record_answer returned for this answer")]
 
 
 ARG_MODELS: dict[str, type[_Args]] = {
     "search_context": SearchContextArgs, "run_metric": RunMetricArgs, "query_source": QuerySourceArgs,
     "get_rows": GetRowsArgs, "combine": CombineArgs, "record_answer": RecordAnswerArgs,
+    "confirm_answer": ConfirmAnswerArgs,
 }
 _JSON_FIELDS = {name: {f for f, info in model.model_fields.items() if info.annotation is not str}
                 for name, model in ARG_MODELS.items()}
@@ -208,6 +211,8 @@ class Gateway:
                                        queue=COMBINE_QUEUE)
         self.record_limiter = Limiter("record_answer", total=RECORD_CONCURRENCY, per_sub=RECORD_PER_SUB,
                                       queue=RECORD_QUEUE, rate_per_min=RECORD_RATE_PER_MIN, burst=RECORD_BURST)
+        self.confirm_limiter = Limiter("confirm_answer", total=RECORD_CONCURRENCY, per_sub=RECORD_PER_SUB,
+                                       queue=RECORD_QUEUE, rate_per_min=RECORD_RATE_PER_MIN, burst=RECORD_BURST)
 
     # -------------------------------------------------------------------------------------------- entry point
     async def call_tool(self, name: str, claims: dict, arguments: Any) -> CallToolResult:
@@ -342,21 +347,34 @@ class Gateway:
         for h in handles:
             self.store.get(sub, h)  # another sub's, expired or made-up handle: "unknown handle", nothing logged
         metric_ids, dimensions = self._structured_plan(sub, handles)
-        # verified is a request: stored true only when EVERY handle resolves to governed metrics (D5a: a query_source
-        # result, or a combine over one, carries rows the history gate never sees, so it never lends a verified row)
-        verified = args.verified is True and bool(handles) and bool(metric_ids) and \
-            all(self._metric_backed(sub, h) for h in handles)
+        # metric_backed: EVERY handle resolves to governed metrics (D5a: a query_source result, or a combine over
+        # one, carries rows the history gate never sees). verified is never set here: only confirm_answer sets it.
+        metric_backed = bool(handles) and bool(metric_ids) and all(self._metric_backed(sub, h) for h in handles)
+        record_id = str(uuid.uuid4())
         roles = claims.get("roles")
         stored = await self.audit.log_query({
             "sub": sub, "persona": roles[0] if isinstance(roles, list) and roles else None,
             "question": args.question, "plan": {"metric_ids": metric_ids, "dimensions": dimensions},
-            "handles": handles, "metric_ids": metric_ids, "verified": verified, "status": "ok"})
+            "handles": handles, "metric_ids": metric_ids, "verified": False, "metric_backed": metric_backed,
+            "record_id": record_id, "status": "ok"})
         if stored is not True:
             raise GatewayError("record_failed", "the answer could not be recorded; try again shortly")
-        out = {"recorded": True, "verified": verified, "metric_ids": metric_ids, "dimensions": dimensions}
-        if args.verified and not verified:
-            out["note"] = "stored as unverified: no governed metric backs these handles"
-        return out
+        return {"recorded": True, "record_id": record_id, "metric_backed": metric_backed,
+                "metric_ids": metric_ids, "dimensions": dimensions}
+
+    async def _confirm_answer(self, claims: dict, args: ConfirmAnswerArgs, rec: CallRecord) -> dict:
+        sub = claims["sub"]
+        release = await self.confirm_limiter.acquire(sub)
+        try:
+            try:
+                confirmed = await self.audit.confirm_answer(sub, args.record_id)
+            except AuditUnavailable:
+                raise GatewayError("confirm_failed", "the answer could not be confirmed; try again shortly") from None
+        finally:
+            release()
+        if not confirmed:   # unknown, another caller's, not metric-backed or not ok: one answer for all of them
+            raise GatewayError("not_confirmable", "this answer cannot be confirmed")
+        return {"confirmed": True}
 
     def _metric_backed(self, sub: str, handle: str, depth: int = 0) -> bool:
         """True when `handle` is a run_metric result whose recorded plan names >= 1 catalog metric (all of them in the

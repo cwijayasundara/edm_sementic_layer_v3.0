@@ -8,7 +8,7 @@ import pytest
 
 from prism.config import Settings
 from prism.gateway import cli
-from prism.gateway.server import create_app
+from prism.gateway.server import TOOLS, create_app
 from tests.gateway.test_server import make_gateway, serving
 
 
@@ -76,7 +76,7 @@ async def test_list_and_call_against_a_running_gateway_print_no_token(fake_catal
         rc_err = await asyncio.to_thread(cli.main, ["call", "run_metric", "--as", "cash_ops_emea", "--url", url,
                                                     "--args", '{"metric_id": "price_conflicts"}'])
         refused = capsys.readouterr()
-    assert rc_list == 0 and len(json.loads(listed.out)) == 6
+    assert rc_list == 0 and len(json.loads(listed.out)) == len(TOOLS)
     assert rc_call == 0 and json.loads(called.out)["handle"].startswith("r_")
     assert rc_err == 1 and "not_permitted" in refused.err
     assert minted

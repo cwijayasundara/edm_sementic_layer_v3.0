@@ -2,7 +2,7 @@
 
 Same transport as the source servers (prism.mcp.base): stateless streamable HTTP with JSON responses, the SDK token
 verifier (audience `gateway-mcp`, HS256 from prism.security.tokens), an explicit Host allow-list. Requests over
-MAX_BODY_BYTES are refused with 413 before the JSON is parsed. The six tools are in prism.gateway.service; this module
+MAX_BODY_BYTES are refused with 413 before the JSON is parsed. The seven tools are in prism.gateway.service; this module
 wires them to MCP, builds the runtime and refuses to start when a dependency is missing:
 
   uvicorn prism.gateway.server:create_app_from_env --factory --host 127.0.0.1 --port 8200
@@ -218,20 +218,27 @@ async def combine(sql: str, handles: dict) -> CallToolResult:
     raise NotImplementedError
 
 
-async def record_answer(question: str, plan: str, handles: list[str], verified: bool) -> CallToolResult:
+async def record_answer(question: str, plan: str, handles: list[str]) -> CallToolResult:
     """Record how a question was answered (query history), citing at least one of your own live result handles. The
-    gateway stores the metrics and dimensions of the handles, never your plan text or any result values. verified is
-    a request: set it only when the user confirmed the answer; it is stored as true only when a governed metric backs
-    the handles (the human-confirmed path is a later UI feature)."""
+    gateway stores the metrics and dimensions of the handles, never your plan text or any result values. Returns a
+    record_id; the answer only becomes verified history when the user confirms it."""
     raise NotImplementedError
 
 
-_TOOL_FUNCS = {f.__name__: f for f in (search_context, run_metric, query_source, get_rows, combine, record_answer)}
+async def confirm_answer(record_id: str) -> CallToolResult:
+    """The user confirmed this answer (record_id from record_answer). Only your own metric-backed answers can be
+    confirmed."""
+    raise NotImplementedError
+
+
+_TOOL_FUNCS = {f.__name__: f for f in (search_context, run_metric, query_source, get_rows, combine, record_answer,
+                                       confirm_answer)}
+WRITE_TOOLS = frozenset({"record_answer", "confirm_answer"})
 
 
 def _register_tools(mcp: MCPServer) -> None:
     for name in TOOLS:
-        mcp.add_tool(_TOOL_FUNCS[name], name=name, annotations=READ_ONLY if name != "record_answer" else None)
+        mcp.add_tool(_TOOL_FUNCS[name], name=name, annotations=None if name in WRITE_TOOLS else READ_ONLY)
         # one source of truth: the advertised schema is the model Gateway validates with
         mcp._tool_manager.get_tool(name).parameters = ARG_MODELS[name].model_json_schema()
 

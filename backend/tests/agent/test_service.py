@@ -48,7 +48,7 @@ async def test_fast_path_metric_question_streams_plan_widget_summary_telemetry()
     assert events[1]["handle_info"]["recipe"]["tool"] == "run_metric"
     assert events[3]["path"] == "metric" and events[3]["llm_turns"] >= 4
     assert ("record_answer", {"question": "How many open breaks by region?", "plan": "agent run",
-                              "handles": ["r_aaaaaaaaaaaa"], "verified": True}) in gw.calls
+                              "handles": ["r_aaaaaaaaaaaa"]}) in gw.calls
     assert pool.rows and pool.rows[0]["status"] == "ok"
 
 
@@ -227,7 +227,7 @@ async def test_record_answer_sends_deduplicated_widget_metric_handles():
               reply_tools(("emit_dashboard_spec", _spec(h1, h1, h2, "r_cccccccccccc"))), reply_text("ok")]
     _, rec = await _answer(gw, script)
     assert rec == [("record_answer", {"question": "How many open breaks by region?", "plan": "agent run",
-                                      "handles": [h1, h2], "verified": True})]
+                                      "handles": [h1, h2]})]
 
 
 async def test_record_answer_is_skipped_for_fallback_no_spec_refusal_and_non_metric_handles():

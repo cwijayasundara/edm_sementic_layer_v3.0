@@ -167,7 +167,7 @@ class AgentService:
         if not handles:
             return
         try:
-            await gateway.call("record_answer", {"question": question, "plan": "agent run", "verified": True,
+            await gateway.call("record_answer", {"question": question, "plan": "agent run",
                                                  "handles": handles[:RECORDED_HANDLES]})
         except Exception as exc:  # noqa: BLE001 - a failed write-back never fails a delivered answer
             log.warning("record_answer failed: %s", getattr(exc, "code", type(exc).__name__))

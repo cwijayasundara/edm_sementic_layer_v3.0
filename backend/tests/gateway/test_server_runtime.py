@@ -46,16 +46,18 @@ async def test_real_runtime_serves_role_filtered_context_and_audits_every_call(r
             pack = body(await c.call_tool("search_context", {"question": "open breaks by legal entity"}))
             hidden = await c.call_tool("run_metric", {"metric_id": "price_conflicts"})
             recorded = body(await c.call_tool("record_answer", {"question": "open breaks by legal entity",
-                                                                "plan": "searched", "handles": [handle],
-                                                                "verified": True}))
+                                                                "plan": "searched", "handles": [handle]}))
+            confirmed = body(await c.call_tool("confirm_answer", {"record_id": recorded["record_id"]}))
     ids = [m["id"] for m in pack["metrics"]]
     assert "open_breaks" in ids
     assert {m["source"] for m in pack["metrics"]} <= {"cashrecon", "feedhub"}
     assert hidden.is_error and "not_permitted" in text(hidden) and "marketmaster" not in text(hidden)
-    assert recorded["recorded"] is True and recorded["verified"] is True
+    assert recorded["recorded"] is True and recorded["metric_backed"] is True and confirmed == {"confirmed": True}
     audit = _rows(runtime_settings, "audit", sub)
     assert [(r["tool"], r["status"], r["error_code"]) for r in audit] == [
-        ("search_context", "ok", None), ("run_metric", "error", "not_permitted"), ("record_answer", "ok", None)]
+        ("search_context", "ok", None), ("run_metric", "error", "not_permitted"), ("record_answer", "ok", None),
+        ("confirm_answer", "ok", None)]
     assert audit[0]["question_hash"] and "open breaks" not in str(audit)
     (q,) = _rows(runtime_settings, "query_log", sub)
-    assert q["verified"] is True and q["metric_ids"] == ["open_breaks"] and q["persona"] == "cash_ops_emea" and len(q["question_hash"]) == 64
+    assert q["verified"] is True and q["metric_backed"] is True and q["record_id"] == recorded["record_id"]
+    assert q["metric_ids"] == ["open_breaks"] and q["persona"] == "cash_ops_emea" and len(q["question_hash"]) == 64
