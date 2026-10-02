@@ -126,7 +126,7 @@ export function WidgetCard({ item, onRemove, onTogglePin, onProvenance }:
         </DialogContent>
       </Dialog>
       {live && <ContextGraphDialog open={graphOpen} onOpenChange={setGraphOpen} handle={item.widget.handle}
-        title={item.widget.title} />}
+        title={item.widget.title} runId={item.runId} />}
     </div>
   );
 }

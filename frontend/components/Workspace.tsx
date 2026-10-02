@@ -3,6 +3,7 @@ import { MessageSquareText, PanelRightClose, PanelRightOpen, X } from "lucide-re
 import { useCallback, useEffect, useReducer, useState } from "react";
 import { AssistantPanel } from "@/components/AssistantPanel";
 import { Canvas } from "@/components/Canvas";
+import { ContextGraphDialog } from "@/components/ContextGraphDialog";
 import { DashboardsMenu } from "@/components/DashboardsMenu";
 import { Header } from "@/components/Header";
 import { KpiStrip } from "@/components/KpiStrip";
@@ -23,6 +24,7 @@ export function Workspace() {
   const { claims } = useSession();
   const [items, dispatch] = useReducer(canvasReducer, []);
   const [drawer, setDrawer] = useState<CanvasItem | null>(null);
+  const [explain, setExplain] = useState<{ runId: string; handle?: string; title: string } | null>(null);
   const [assistantOpen, setAssistantOpen] = useState(true);
   // below lg the assistant is a full-screen panel; it stays mounted so the conversation survives closing it
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -36,6 +38,7 @@ export function Workspace() {
   const onWidget = useCallback((key: string, e: WidgetEvent, question: string) => {
     dispatch({ type: "add", item: { key, widget: e.widget, info: e.handle_info, origin: question, status: "ok" } });
   }, []);
+  const onRun = useCallback((turnId: string, runId: string) => dispatch({ type: "setRun", turnId, runId }), []);
   const onOpen = useCallback((run: DashboardRun) => {
     dispatch({ type: "openDashboard", dashboardId: run.id, title: run.title, widgets: run.widgets });
   }, []);
@@ -61,7 +64,7 @@ export function Workspace() {
               {assistantOpen ? <PanelRightClose className="size-4" aria-hidden /> : <PanelRightOpen className="size-4" aria-hidden />}</button>
           </div>
           <div className={`min-h-0 flex-1 ${assistantOpen ? "" : "lg:hidden"}`}>
-            <AssistantPanel onWidget={onWidget} examples={personaById(claims.sub)?.examples} />
+            <AssistantPanel onWidget={onWidget} onRun={onRun} onExplain={setExplain} examples={personaById(claims.sub)?.examples} />
           </div>
         </aside>
       </div>
@@ -71,6 +74,8 @@ export function Workspace() {
           <MessageSquareText className="size-4" aria-hidden />Assistant</button>
       )}
       <ProvenanceDrawer item={drawer} onClose={() => setDrawer(null)} />
+      {explain && <ContextGraphDialog open onOpenChange={(o) => { if (!o) setExplain(null); }} title={explain.title}
+        handle={explain.handle} runId={explain.runId} initialTab="reasoning" />}
     </div>
   );
 }

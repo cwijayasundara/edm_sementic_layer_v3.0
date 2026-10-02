@@ -138,6 +138,39 @@ async function askWithAnswer(confirmable: boolean) {
   await screen.findByText("Done.");
 }
 
+describe("How I got this", () => {
+  it("offers How I got this once telemetry arrives and reports the run id", async () => {
+    chat.mockImplementation(async function* () {
+      yield widget;
+      yield { type: "summary", text: "Done." };
+      yield { type: "telemetry", run_id: "a".repeat(32), path: "metric", models: ["m"], input_tokens: 1,
+        output_tokens: 1, cache_read_input_tokens: 0, llm_turns: 1, tool_calls: 1, tool_latency_ms: 1, cost_usd: 0 };
+    });
+    const onRun = vi.fn(), onExplain = vi.fn();
+    render(<AssistantPanel onWidget={vi.fn()} onRun={onRun} onExplain={onExplain} />);
+    await userEvent.type(screen.getByRole("textbox", { name: "Question" }), "Q?");
+    await userEvent.click(screen.getByRole("button", { name: "Ask" }));
+    await userEvent.click(await screen.findByRole("button", { name: "How I got this" }));
+    expect(onRun).toHaveBeenCalledWith(expect.any(String), "a".repeat(32));
+    expect(onExplain).toHaveBeenCalledWith({ runId: "a".repeat(32), handle: "r_aaaaaaaaaaaa", title: "Q?" });
+  });
+
+  it("confirms with the run id when telemetry arrived", async () => {
+    chat.mockImplementation(async function* () {
+      yield { type: "summary", text: "Done." };
+      yield { type: "answer", record_id: RID, confirmable: true };
+      yield { type: "telemetry", run_id: "b".repeat(32), path: "metric", models: ["m"], input_tokens: 1,
+        output_tokens: 1, cache_read_input_tokens: 0, llm_turns: 1, tool_calls: 1, tool_latency_ms: 1, cost_usd: 0 };
+    });
+    confirm.mockResolvedValue(undefined);
+    render(<AssistantPanel onWidget={vi.fn()} />);
+    await userEvent.type(screen.getByRole("textbox", { name: "Question" }), "q");
+    await userEvent.click(screen.getByRole("button", { name: "Ask" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Confirm this answer" }));
+    expect(confirm).toHaveBeenCalledWith("T", RID, "b".repeat(32));
+  });
+});
+
 describe("confirming an answer", () => {
   it("confirms a confirmable answer once and shows Confirmed", async () => {
     let finish!: () => void;
@@ -150,7 +183,7 @@ describe("confirming an answer", () => {
     finish();
     expect(await screen.findByText("Confirmed")).toBeInTheDocument();
     expect(confirm).toHaveBeenCalledTimes(1);
-    expect(confirm).toHaveBeenCalledWith("T", RID);
+    expect(confirm).toHaveBeenCalledWith("T", RID, undefined);
     expect(screen.queryByRole("button", { name: "Confirm this answer" })).not.toBeInTheDocument();
   });
 

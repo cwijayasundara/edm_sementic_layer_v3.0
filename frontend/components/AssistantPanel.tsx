@@ -1,5 +1,5 @@
 "use client";
-import { ArrowUp, Check, ChevronRight, CircleCheck, Loader2, MessageSquareText, Square, ThumbsUp } from "lucide-react";
+import { ArrowUp, Check, ChevronRight, CircleCheck, Loader2, MessageSquareText, Route, Square, ThumbsUp } from "lucide-react";
 import { useEffect, useReducer, useRef, useState } from "react";
 import { Markdown } from "@/components/Markdown";
 import { Button } from "@/components/ui/button";
@@ -19,7 +19,7 @@ export function planText(p: PlanEvent): string {
   return "Combining results…";
 }
 
-export function TurnView({ turn, onConfirm }: { turn: Turn; onConfirm?: (turn: Turn) => void }) {
+export function TurnView({ turn, onConfirm, onExplain }: { turn: Turn; onConfirm?: (turn: Turn) => void; onExplain?: () => void }) {
   const t = turn.telemetry;
   const a = turn.answer;
   const streaming = turn.status === "streaming";
@@ -55,6 +55,9 @@ export function TurnView({ turn, onConfirm }: { turn: Turn; onConfirm?: (turn: T
             </Button>
             {a.state === "failed" && <p role="alert" className="text-xs text-[var(--prism-crimson)]">{CONFIRM_FAILED}</p>}
           </div>)}
+      {t && onExplain && <button type="button" onClick={onExplain}
+        className="inline-flex items-center gap-1 text-xs font-medium text-[var(--prism-muted)] underline-offset-2 hover:underline">
+        <Route className="size-3.5" aria-hidden />How I got this</button>}
       {t && <details className="group text-[11px] text-[#8a93a3]">
         <summary className="inline-flex cursor-pointer list-none items-center gap-0.5 rounded hover:text-[var(--prism-muted)] [&::-webkit-details-marker]:hidden">
           <ChevronRight className="size-3 transition-transform group-open:rotate-90" aria-hidden />Run details</summary>
@@ -66,13 +69,18 @@ export function TurnView({ turn, onConfirm }: { turn: Turn; onConfirm?: (turn: T
   );
 }
 
-export function AssistantPanel({ onWidget, examples = [] }:
-  { onWidget: (key: string, event: WidgetEvent, question: string) => void; examples?: readonly string[] }) {
+export function AssistantPanel({ onWidget, onRun, onExplain, examples = [] }: {
+  onWidget: (key: string, event: WidgetEvent, question: string) => void;
+  onRun?: (turnId: string, runId: string) => void;
+  onExplain?: (x: { runId: string; handle?: string; title: string }) => void;
+  examples?: readonly string[];
+}) {
   const { call } = useSession();
   const [turns, dispatch] = useReducer(chatReducer, []);
   const [question, setQuestion] = useState("");
   const active = useRef<{ id: string; ctrl: AbortController } | null>(null);
   const seq = useRef(0);
+  const handles = useRef(new Map<string, string>());
   const box = useRef<HTMLTextAreaElement>(null);
   const end = useRef<HTMLDivElement>(null);
   const last = turns.at(-1);
@@ -92,7 +100,11 @@ export function AssistantPanel({ onWidget, examples = [] }:
       await call(async (token) => {
         for await (const event of api.chat(token, q, ctrl.signal)) {
           if (ctrl.signal.aborted) break;
-          if (event.type === "widget") onWidget(widgetKey(id, event.widget.id), event, q);
+          if (event.type === "widget") {
+            if (!handles.current.has(id)) handles.current.set(id, event.widget.handle);
+            onWidget(widgetKey(id, event.widget.id), event, q);
+          }
+          if (event.type === "telemetry") onRun?.(id, event.run_id);
           dispatch({ type: "event", id, event });
         }
       });
@@ -110,7 +122,7 @@ export function AssistantPanel({ onWidget, examples = [] }:
     if (!a?.confirmable || a.state === "sending" || a.state === "confirmed") return;
     dispatch({ type: "confirm", id: turn.id, state: "sending" });
     try {
-      await call((token) => api.confirm(token, a.recordId));
+      await call((token) => api.confirm(token, a.recordId, turn.telemetry?.run_id));
       dispatch({ type: "confirm", id: turn.id, state: "confirmed" });
     } catch (e) {
       if (!(e instanceof Unauthorized)) dispatch({ type: "confirm", id: turn.id, state: "failed" });
@@ -151,7 +163,8 @@ export function AssistantPanel({ onWidget, examples = [] }:
               </div>)}
           </div>
         ) : (
-          <ol className="space-y-6">{turns.map((t) => <TurnView key={t.id} turn={t} onConfirm={confirmTurn} />)}</ol>
+          <ol className="space-y-6">{turns.map((t) => <TurnView key={t.id} turn={t} onConfirm={confirmTurn}
+            onExplain={t.telemetry ? () => onExplain?.({ runId: t.telemetry!.run_id, handle: handles.current.get(t.id), title: t.question }) : undefined} />)}</ol>
         )}
         <div ref={end} />
       </div>
