@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { DataTable } from "@/components/DataTable";
+import { EXPIRED_TEXT, STATUS_TEXT } from "@/components/WidgetCard";
 import { useSession } from "@/components/SessionProvider";
 import { ApiError, api } from "@/lib/api";
 import type { CanvasItem } from "@/lib/canvas";
@@ -51,7 +52,8 @@ function ProvenanceBody({ item }: { item: CanvasItem }) {
   callRef.current = call;
   const [offset, setOffset] = useState(0);
   const [page, setPage] = useState<ResultPage | null>(null);
-  const [failed, setFailed] = useState<string | null>(null);
+  const [failed, setFailed] = useState<{ text: string; retry: boolean } | null>(null);
+  const [nonce, setNonce] = useState(0);
 
   useEffect(() => {
     if (status !== "ok") return;
@@ -60,9 +62,9 @@ function ProvenanceBody({ item }: { item: CanvasItem }) {
     callRef.current((t) => api.results(t, handle, offset, PAGE_SIZE))
       .then((p) => { if (!cancelled) setPage(p); })
       .catch((e) => { if (!cancelled) setFailed(e instanceof ApiError && e.status === 404
-        ? "This result has expired. Ask again or reopen the dashboard." : "Data service unavailable"); });
+        ? { text: EXPIRED_TEXT, retry: false } : { text: STATUS_TEXT.unavailable, retry: true }); });
     return () => { cancelled = true; };
-  }, [handle, status, offset]);
+  }, [handle, status, offset, nonce]);
 
   const info = item.info;
   const total = page?.row_count ?? info?.row_count ?? 0;
@@ -76,7 +78,12 @@ function ProvenanceBody({ item }: { item: CanvasItem }) {
             </dl>
             {info.recipe ? <RecipeBlock view={describeRecipe(info.recipe)} />
               : <p className="text-sm text-muted-foreground">Query details are not available for this result.</p>}
-            {failed ? <p className="text-sm text-muted-foreground">{failed}</p> : page && (
+            {failed ? (
+              <div className="space-y-2 text-sm text-muted-foreground">
+                <p>{failed.text}</p>
+                {failed.retry && <Button size="sm" variant="outline" onClick={() => setNonce((n) => n + 1)}>Retry</Button>}
+              </div>
+            ) : page && (
               <>
                 <DataTable columns={page.columns} rows={page.rows} />
                 <div className="flex items-center justify-between text-sm">

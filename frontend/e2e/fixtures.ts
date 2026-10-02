@@ -13,14 +13,15 @@ export const WIDGET = { id: "w1", type: "bar", title: "Open breaks by region", h
   encoding: { x: "region", y: "value", series: null, value: null, unit: null } };
 
 const frame = (o: { type: string; [k: string]: unknown }) => `event: ${o.type}\ndata: ${JSON.stringify(o)}\n\n`;
-export const CHAT_BODY = [
+export const chatBody = (handle: string) => [
   frame({ type: "plan", tool: "run_metric", label: "metric open_breaks" }),
-  frame({ type: "widget", widget: WIDGET, handle_info: { columns: ["region", "value"], row_count: 60,
+  frame({ type: "widget", widget: { ...WIDGET, handle }, handle_info: { columns: ["region", "value"], row_count: 60,
     source: "cashrecon", metric_id: "open_breaks", recipe: RECIPE } }),
   frame({ type: "summary", text: "EMEA has the most open breaks." }),
   frame({ type: "telemetry", run_id: "r1", path: "metric", models: ["m"], input_tokens: 1000, output_tokens: 100,
     cache_read_input_tokens: 800, llm_turns: 2, tool_calls: 2, tool_latency_ms: 20, cost_usd: 0.01 }),
 ].join("");
+export const CHAT_BODY = chatBody("r_aaaaaaaaaaaa");
 
 export function rows(offset: number, limit: number) {
   const all = Array.from({ length: 60 }, (_, i) => [i === 0 ? "EMEA" : `EMEA-${i}`, 60 - i]);

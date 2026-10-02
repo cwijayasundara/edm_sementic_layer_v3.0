@@ -42,6 +42,21 @@ describe("canvasReducer", () => {
       { widget: { ...widget, id: "w2", handle: "" }, status: "not_permitted" },
     ] });
     expect(items.map((i) => [i.key, i.status, i.origin])).toEqual([
-      ["d1:w1", "ok", "Board"], ["d1:w2", "not_permitted", "Board"], ["a", "ok", "q"]]);
+      ["d1:0", "ok", "Board"], ["d1:1", "not_permitted", "Board"], ["a", "ok", "q"]]);
+  });
+
+  it("keys reopened cards by position so widgets with the same per-turn id stay distinct", () => {
+    const widgets = [
+      { widget, status: "ok" as const, handle_info: info(recipe) },
+      { widget: { ...widget, handle: "r_bbbbbbbbbbbb" }, status: "ok" as const, handle_info: info(recipe) },
+    ];
+    const open = (items: CanvasItem[]) => canvasReducer(items, { type: "openDashboard", dashboardId: "d1", title: "Board", widgets });
+    const once = open([]);
+    expect(once.map((i) => i.key)).toEqual(["d1:0", "d1:1"]);
+    expect(once.map((i) => i.widget.handle)).toEqual(["r_aaaaaaaaaaaa", "r_bbbbbbbbbbbb"]);
+    const twice = open(once);
+    expect(twice.map((i) => i.key)).toEqual(["d1:0", "d1:1"]);
+    const pinned = canvasReducer(twice, { type: "togglePin", key: "d1:0" });
+    expect(pinned.map((i) => i.pinned)).toEqual([true, false]);
   });
 });

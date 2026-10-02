@@ -19,7 +19,8 @@ reviewer per task, fix rounds where a review found something). What M6 consumes:
 | 10 | Widget cards, canvas grid, provenance drawer with paged rows | `ba11e81`, fix `2ab1011` |
 | 11 | Streaming assistant panel (plan steps, stop, telemetry line) | `af559b1`, fixes `26e0852`, `30637d5` |
 | 12 | Saved-dashboards menu and the full workspace | `1a1e73f`, fix `d6a8d7f` |
-| 13 | Playwright smoke (mocked agent plus live login/KPI), README UI section, these docs | this commit |
+| 13 | Playwright smoke (mocked agent plus live login/KPI), README UI section, these docs | 74da6a7 |
+| 14 | Final-review fix wave: position-keyed reopened cards, neutral icon replaces default favicon, Retry on widget/provenance failures, reset card load on status change, stronger e2e reopen check, carry-forward items | the fix-wave commit after 74da6a7 |
 
 ## Rulings made during the build
 - Recipe argument bounds import the gateway's own limits instead of copying numbers, so the two cannot drift.

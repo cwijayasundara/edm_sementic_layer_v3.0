@@ -55,23 +55,29 @@ export function WidgetCard({ item, onRemove, onTogglePin, onProvenance }:
   callRef.current = call;
   const [load, setLoad] = useState<Load>({ kind: "loading" });
   const [expanded, setExpanded] = useState(false);
+  const [nonce, setNonce] = useState(0);
   const live = item.status === "ok" && item.widget.handle !== "";
 
   useEffect(() => {
+    setLoad({ kind: "loading" });
     if (!live) return;
     let cancelled = false;
     callRef.current((t) => api.results(t, item.widget.handle, 0, CHART_ROWS))
       .then((page) => { if (!cancelled) setLoad({ kind: "ok", page }); })
       .catch((e) => { if (!cancelled) setLoad(e instanceof ApiError && e.status === 404 ? { kind: "expired" } : { kind: "error" }); });
     return () => { cancelled = true; };
-  }, [item.widget.handle, live]);
+  }, [item.widget.handle, live, nonce]);
 
   const pinnable = canPin(item);
   const body = !live
     ? <p className="py-8 text-center text-sm text-muted-foreground">{STATUS_TEXT[item.status as keyof typeof STATUS_TEXT]}</p>
     : load.kind === "loading" ? <p className="py-8 text-center text-sm text-muted-foreground">Loading…</p>
     : load.kind === "expired" ? <p className="py-8 text-center text-sm text-muted-foreground">{EXPIRED_TEXT}</p>
-    : load.kind === "error" ? <p className="py-8 text-center text-sm text-muted-foreground">{STATUS_TEXT.unavailable}</p>
+    : load.kind === "error" ? (
+      <div className="py-8 text-center text-sm text-muted-foreground">
+        <p>{STATUS_TEXT.unavailable}</p>
+        <Button size="sm" variant="outline" className="mt-2" onClick={() => setNonce((n) => n + 1)}>Retry</Button>
+      </div>)
     : <Boundary><WidgetBody item={item} page={load.page} height={260} /></Boundary>;
 
   return (
@@ -85,20 +91,20 @@ export function WidgetCard({ item, onRemove, onTogglePin, onProvenance }:
           <Button size="sm" variant={item.pinned ? "default" : "outline"} disabled={!pinnable}
             title={pinnable ? (item.pinned ? "Unpin" : "Pin") : NO_PIN} aria-label={item.pinned ? "Unpin" : "Pin"}
             onClick={onTogglePin}>{item.pinned ? "Pinned" : "Pin"}</Button>
-          <Button size="sm" variant="outline" disabled={load.kind !== "ok"} onClick={() => setExpanded(true)}>Expand</Button>
+          <Button size="sm" variant="outline" disabled={!live || load.kind !== "ok"} onClick={() => setExpanded(true)}>Expand</Button>
           <Button size="sm" variant="ghost" aria-label="Remove" onClick={onRemove}>×</Button>
         </div>
       </CardHeader>
       <CardContent className="flex-1">
         {body}
-        {load.kind === "ok" && load.page.row_count > CHART_ROWS &&
+        {live && load.kind === "ok" && load.page.row_count > CHART_ROWS &&
           <p className="mt-1 text-xs text-muted-foreground">Showing the first {CHART_ROWS} of {load.page.row_count} rows</p>}
         {live && <Button variant="link" size="sm" className="px-0" onClick={onProvenance}>view query · source rows</Button>}
       </CardContent>
       <Dialog open={expanded} onOpenChange={setExpanded}>
         <DialogContent className="max-w-5xl">
           <DialogHeader><DialogTitle>{item.widget.title}</DialogTitle></DialogHeader>
-          {load.kind === "ok" && <Boundary><WidgetBody item={item} page={load.page} height={520} /></Boundary>}
+          {live && load.kind === "ok" && <Boundary><WidgetBody item={item} page={load.page} height={520} /></Boundary>}
         </DialogContent>
       </Dialog>
     </Card>

@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 // WidgetCard loads Chart through next/dynamic; stub the loader so the chart renders synchronously
@@ -56,5 +57,38 @@ describe("WidgetCard", () => {
     expect(screen.getByRole("button", { name: /pin/i })).toBeDisabled();
     expect(screen.getByRole("button", { name: /pin/i })).toHaveAttribute("title",
       "This result cannot be saved: its query details are not available.");
+  });
+
+  it("offers Retry after a network failure and renders data once it succeeds", async () => {
+    results.mockReset();
+    results.mockRejectedValueOnce(new Error("boom")).mockResolvedValueOnce({ handle: "r_aaaaaaaaaaaa",
+      columns: ["region", "value"], offset: 0, row_count: 1, rows: [["EMEA", 3]] });
+    render(<WidgetCard item={base} {...props} />);
+    expect(await screen.findByText(STATUS_TEXT.unavailable)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(await screen.findByTestId("chart")).toBeInTheDocument();
+    expect(results).toHaveBeenCalledTimes(2);
+  });
+
+  it("offers no Retry on an expired result", async () => {
+    results.mockReset();
+    results.mockRejectedValueOnce(new ApiError(404));
+    render(<WidgetCard item={base} {...props} />);
+    await screen.findByText(EXPIRED_TEXT);
+    expect(screen.queryByRole("button", { name: "Retry" })).not.toBeInTheDocument();
+  });
+
+  it("drops stale data when the same card becomes unavailable", async () => {
+    results.mockReset();
+    results.mockResolvedValueOnce({ handle: "r_aaaaaaaaaaaa", columns: ["region", "value"], offset: 0, row_count: 250,
+      rows: [["EMEA", 3]] });
+    const { rerender } = render(<WidgetCard item={base} {...props} />);
+    expect(await screen.findByTestId("chart")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Expand" })).toBeEnabled();
+    rerender(<WidgetCard item={{ ...base, status: "unavailable", info: null }} {...props} />);
+    expect(screen.getByText(STATUS_TEXT.unavailable)).toBeInTheDocument();
+    expect(screen.queryByTestId("chart")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Showing the first/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Expand" })).toBeDisabled();
   });
 });

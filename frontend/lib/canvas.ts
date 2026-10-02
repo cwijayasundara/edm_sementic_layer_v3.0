@@ -21,7 +21,7 @@ export function canvasReducer(items: CanvasItem[], action: CanvasAction): Canvas
     case "togglePin":
       return items.map((i) => (i.key === action.key && canPin(i) ? { ...i, pinned: !i.pinned } : i));
     case "openDashboard": {
-      const fresh: CanvasItem[] = action.widgets.map((w) => ({ key: `${action.dashboardId}:${w.widget.id}`,
+      const fresh: CanvasItem[] = action.widgets.map((w, i) => ({ key: `${action.dashboardId}:${i}`,
         widget: w.widget, info: w.handle_info ?? null, origin: action.title, pinned: false, status: w.status }));
       const keys = new Set(fresh.map((f) => f.key));
       return [...fresh, ...items.filter((i) => !keys.has(i.key))];

@@ -62,3 +62,8 @@ Frontend:
 - Provenance: an `ok` widget with an empty handle renders a blank body; drawer refetches when item identity changes.
 - Tooling: `next lint` is deprecated (migrate to the ESLint CLI before Next 16); `npm audit` reports 5 transitive
   vulnerabilities.
+- Dashboards (final review): no dashboard group header (each reopened card is tagged with the dashboard title
+  instead); `canPin` does not mirror the backend recipe depth/node bounds (an over-deep combine fails at save with a
+  generic message); delete has no confirmation; no body-size cap on `POST /dashboards`.
+- Widget ids are per chat turn (fallback specs always use `w1`), so they are not unique across turns; the UI keys
+  reopened cards by position (`dashboardId:index`).

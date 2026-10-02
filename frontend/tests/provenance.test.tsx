@@ -7,6 +7,7 @@ vi.mock("@/components/SessionProvider", () => ({ useSession: () => ({ call: (fn:
 vi.mock("@/lib/api", async (orig) => ({ ...(await orig<typeof import("@/lib/api")>()), api: { results } }));
 
 import { ProvenanceDrawer } from "@/components/ProvenanceDrawer";
+import { ApiError } from "@/lib/api";
 import type { CanvasItem } from "@/lib/canvas";
 
 const item: CanvasItem = {
@@ -52,5 +53,25 @@ describe("ProvenanceDrawer item switch", () => {
     expect(await screen.findByText("r_bbbbbbbbbbbb-0")).toBeInTheDocument();
     expect(results).not.toHaveBeenCalledWith("T", "r_bbbbbbbbbbbb", 50, 50);
     expect(results).toHaveBeenLastCalledWith("T", "r_bbbbbbbbbbbb", 0, 50);
+  });
+});
+
+describe("ProvenanceDrawer failures", () => {
+  it("offers Retry on a network failure and shows rows after it succeeds", async () => {
+    results.mockReset();
+    results.mockRejectedValueOnce(new Error("boom")).mockResolvedValueOnce({ handle: "r_aaaaaaaaaaaa",
+      columns: ["region", "value"], offset: 0, row_count: 1, rows: [["retried-row", 1]] });
+    render(<ProvenanceDrawer item={item} onClose={vi.fn()} />);
+    expect(await screen.findByText("Data service unavailable")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(await screen.findByText("retried-row")).toBeInTheDocument();
+  });
+
+  it("offers no Retry for an expired result", async () => {
+    results.mockReset();
+    results.mockRejectedValueOnce(new ApiError(404));
+    render(<ProvenanceDrawer item={item} onClose={vi.fn()} />);
+    expect(await screen.findByText(/has expired/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Retry" })).not.toBeInTheDocument();
   });
 });
