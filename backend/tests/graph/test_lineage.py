@@ -68,7 +68,9 @@ def test_combined_root_links_to_present_inputs_only():
 # ----------------------------------------------------------------------------------------------- Neo4j-backed
 import pytest  # noqa: E402
 
+from prism.graph.knowledge import load_knowledge  # noqa: E402
 from prism.graph.lineage import lineage  # noqa: E402
+from prism.graph.loader import load  # noqa: E402
 from prism.graph.model import build_graph, visible  # noqa: E402
 from prism.security.personas import PERSONAS, claims_for  # noqa: E402
 from tests.graph_ns import TEST_GRAPH_NS  # noqa: E402
@@ -141,3 +143,24 @@ def test_questions_are_capped_and_link_to_their_metric(run):
     qs = [x for x in g["nodes"] if x["kind"] == "Question"]
     assert 1 <= len(qs) <= 3
     assert all({"from": q["id"], "to": "metric:price_conflicts", "type": "ASKED_ABOUT"} in g["edges"] for q in qs)
+
+
+@pytest.mark.neo4j
+def test_cross_source_question_needs_every_used_object_visible(neo4j_driver, graph_embedder, scratch_ns):
+    """A question that used a cashrecon AND a feedhub metric passes the union-scope check for a cashrecon-only
+    caller, so only the gate's every-USED-object rule keeps it out of that caller's lineage."""
+    k = load_knowledge()
+    text = "Do late bank feeds explain the open cash breaks per region?"
+    k.history.append(type(k.history[0])(question=text, metrics=["open_breaks", "late_feeds"],
+                                        plan="run_metric(open_breaks) and run_metric(late_feeds); combine",
+                                        status="verified"))
+    load(neo4j_driver, graph_embedder, scratch_ns, graph=build_graph(graph_embedder, knowledge=k))
+
+    def seen(scopes):
+        g = lineage(neo4j_driver, {"open_breaks": []}, (), {"scopes": scopes}, ns=scratch_ns)
+        return {x["id"] for x in g["nodes"]}, {x["label"] for x in g["nodes"] if x["kind"] == "Question"}
+
+    ids, questions = seen(["cashrecon"])
+    assert "metric:open_breaks" in ids                       # not vacuous
+    assert text not in questions
+    assert text in seen(["cashrecon", "feedhub"])[1]         # positive control
