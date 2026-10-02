@@ -52,7 +52,11 @@ test.describe("mocked agent", () => {
 
     await page.getByRole("textbox", { name: "Question" }).fill("How many open breaks are there by region?");
     await page.getByRole("button", { name: "Ask" }).click();
-    await expect(page.getByText("EMEA has the most open breaks.")).toBeVisible();
+    await expect(page.getByText("has the most open breaks.")).toBeVisible();
+    await expect(page.locator("strong", { hasText: "EMEA" })).toBeVisible();
+    await expect(page.getByText(/1,100 tokens/)).toBeHidden();
+    await page.getByText("Run details").click();
+    await expect(page.getByText(/1,100 tokens/)).toBeVisible();
     await expect(page.getByText("Running metric open_breaks…")).toBeVisible();
     await page.getByRole("button", { name: "Confirm this answer" }).first().click();
     await expect(page.getByText("Confirmed").first()).toBeVisible();

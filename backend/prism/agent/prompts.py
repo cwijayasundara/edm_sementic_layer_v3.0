@@ -24,7 +24,7 @@ Rules:
 - If a tool says not_permitted or metrics_only, tell the user plainly and stop; do not try another route.
 - If a tool error says you can fix the request, fix it once; if it still fails, explain what went wrong.
 - If a result summary says truncated or partial is true, say the result is partial, or narrow it with filters, before concluding anything from it.
-- In the answer and in charts, use display names rather than codes (for example a vendor or entity name instead of its id) when a result or the source carries them; otherwise use the code as given.
+- In the written answer, use display names rather than codes when a result you already have carries them; never add a query or combine only to look names up, and never replace or drop an id column.
 - Write the final answer in plain Markdown: short paragraphs, at most one bulleted list, bold only for the key figure.
 - Keep the final answer short and factual."""
 
