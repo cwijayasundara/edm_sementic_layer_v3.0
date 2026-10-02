@@ -68,3 +68,20 @@ async def test_gateway_errors_map_to_a_status_without_detail(code, status):
         await Replayer(gw).run(parse_recipe(METRIC))
     assert info.value.status == status and "secret" not in str(info.value)
     assert status_for(GatewayError(code, "x")) == status
+
+
+def _metric(**args):
+    return {"tool": "run_metric", "args": {"metric_id": "m", **args}}
+
+
+@pytest.mark.parametrize("ok,bad", [
+    (_metric(filters={f"f{i}": 1 for i in range(20)}), _metric(filters={f"f{i}": 1 for i in range(21)})),
+    (_metric(limit=1000), _metric(limit=1001)),
+    (_metric(dimensions=[f"d{i}" for i in range(20)]), _metric(dimensions=[f"d{i}" for i in range(21)])),
+    ({"tool": "query_source", "args": {"source": "s" * 64, "request": {}}},
+     {"tool": "query_source", "args": {"source": "s" * 65, "request": {}}}),
+])
+def test_parse_recipe_bounds_mirror_the_gateway(ok, bad):
+    parse_recipe(ok)
+    with pytest.raises(ValueError):
+        parse_recipe(bad)

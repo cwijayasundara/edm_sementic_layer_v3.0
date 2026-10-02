@@ -7,10 +7,13 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, ValidationError
 
 from prism.agent.gateway_client import GatewayError, GatewayPort
+from prism.gateway.combine import MAX_SQL_CHARS
+from prism.gateway.policy import MAX_DIMENSIONS, MAX_FILTERS, MAX_LIMIT
+from prism.gateway.service import MAX_NAME, MAX_REQUEST_KEYS
 
 MAX_DEPTH = 3
 MAX_NODES = 8
-_NAME = Annotated[str, Field(min_length=1, max_length=128)]
+_NAME = Annotated[str, Field(min_length=1, max_length=MAX_NAME)]
 Status = Literal["not_permitted", "unavailable", "invalid"]
 
 
@@ -20,19 +23,19 @@ class _Model(BaseModel):
 
 class MetricArgs(_Model):
     metric_id: _NAME
-    dimensions: list[_NAME] = Field(default_factory=list, max_length=16)
-    filters: dict[str, Any] = Field(default_factory=dict, max_length=32)
-    limit: StrictInt | None = Field(default=None, ge=1, le=100_000)
+    dimensions: list[_NAME] = Field(default_factory=list, max_length=MAX_DIMENSIONS)
+    filters: dict[str, Any] = Field(default_factory=dict, max_length=MAX_FILTERS)
+    limit: StrictInt | None = Field(default=None, ge=1, le=MAX_LIMIT)
 
 
 class QueryArgs(_Model):
-    source: _NAME
-    request: dict[str, Any] = Field(max_length=20)
+    source: Annotated[str, Field(min_length=1, max_length=64)]  # mirrors gateway QuerySourceArgs.source
+    request: dict[str, Any] = Field(max_length=MAX_REQUEST_KEYS)
 
 
 class CombineArgs(_Model):
-    sql: str = Field(min_length=1, max_length=20_000)
-    inputs: dict[_NAME, dict] = Field(min_length=1, max_length=8)
+    sql: str = Field(min_length=1, max_length=MAX_SQL_CHARS)
+    inputs: dict[_NAME, dict] = Field(min_length=1, max_length=8)  # mirrors gateway CombineArgs.handles
 
 
 class _Node(_Model):
