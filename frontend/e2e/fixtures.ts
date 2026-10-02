@@ -13,6 +13,7 @@ export const RECIPE = { tool: "run_metric", args: { metric_id: "open_breaks", di
 export const WIDGET = { id: "w1", type: "bar", title: "Open breaks by region", handle: "r_aaaaaaaaaaaa",
   encoding: { x: "region", y: "value", series: null, value: null, unit: null } };
 
+export const RUN_ID = "a".repeat(32);
 const frame = (o: { type: string; [k: string]: unknown }) => `event: ${o.type}\ndata: ${JSON.stringify(o)}\n\n`;
 export const chatBody = (handle: string) => [
   frame({ type: "plan", tool: "run_metric", label: "metric open_breaks" }),
@@ -20,7 +21,7 @@ export const chatBody = (handle: string) => [
     source: "cashrecon", metric_id: "open_breaks", recipe: RECIPE } }),
   frame({ type: "summary", text: "**EMEA** has the most open breaks." }),
   frame({ type: "answer", record_id: RECORD_ID, confirmable: true }),
-  frame({ type: "telemetry", run_id: "r1", path: "metric", models: ["m"], input_tokens: 1000, output_tokens: 100,
+  frame({ type: "telemetry", run_id: RUN_ID, path: "metric", models: ["m"], input_tokens: 1000, output_tokens: 100,
     cache_read_input_tokens: 800, llm_turns: 2, tool_calls: 2, tool_latency_ms: 20, cost_usd: 0.01 }),
 ].join("");
 export const CHAT_BODY = chatBody("r_aaaaaaaaaaaa");
@@ -36,3 +37,12 @@ export const LINEAGE = { nodes: [
   { id: "table:cashrecon.breaks", kind: "Table", label: "cashrecon.breaks", source: "cashrecon" },
 ], edges: [{ from: "source:cashrecon", to: "metric:open_breaks", type: "PROVIDES" },
   { from: "metric:open_breaks", to: "table:cashrecon.breaks", type: "COMPUTED_FROM" }], truncated: false, governed: true };
+
+const STEP = { parent: null, note: null, considered: [], ms: 12, status: "ok", error_code: null, tool: null, args: null,
+  handle: null, rows: null, truncated: null, touched: [] };
+export const TRACE = { run_id: RUN_ID, question: "How many open breaks are there by region?",
+  answer: "EMEA has the most open breaks.", path: "metric", status: "ok", confirmed: false, created_at: 1790000000, steps: [
+  { ...STEP, seq: 1, kind: "metric", label: "Ran metric open_breaks by region", tool: "run_metric", rows: 60,
+    touched: [{ id: "metric:open_breaks", kind: "Metric", label: "open_breaks" }] },
+  { ...STEP, seq: 2, kind: "answer", label: "Answered from the metric result" },
+] };

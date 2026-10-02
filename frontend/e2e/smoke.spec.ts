@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { KPIS, LINEAGE, RECORD_ID, TOKEN, WIDGET, chatBody, rows } from "./fixtures";
+import { KPIS, LINEAGE, RECORD_ID, TOKEN, TRACE, WIDGET, chatBody, rows } from "./fixtures";
 
 const AGENT = process.env.NEXT_PUBLIC_AGENT_URL ?? "http://localhost:8000";
 
@@ -28,6 +28,7 @@ test.describe("mocked agent", () => {
         fetched.push(url.pathname.split("/").pop()!);
         return json(rows(Number(url.searchParams.get("offset")), Number(url.searchParams.get("limit"))));
       }
+      if (url.pathname.startsWith("/runs/")) return json(TRACE);
       if (url.pathname.startsWith("/lineage/")) return json(LINEAGE);
       if (url.pathname === "/dashboards" && req.method() === "POST") { saved.push(req.postDataJSON()); return json({ id: "d1" }, 201); }
       if (url.pathname === "/dashboards") return json({ dashboards: saved.length
@@ -76,6 +77,14 @@ test.describe("mocked agent", () => {
     await expect(page.getByRole("dialog").getByText("Context graph")).toBeVisible();
     await page.getByText("List view").click();
     await expect(page.getByRole("dialog").getByText("cashrecon.breaks")).toBeVisible();
+    await page.keyboard.press("Escape");
+
+    await page.getByRole("button", { name: "How I got this" }).click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByRole("tab", { name: "Reasoning" })).toHaveAttribute("aria-selected", "true");
+    await expect(dialog.getByText("Ran metric open_breaks by region")).toBeVisible();
+    await dialog.getByRole("button", { name: "open_breaks" }).click();
+    await expect(dialog.getByRole("tab", { name: "Graph" })).toHaveAttribute("aria-selected", "true");
     await page.keyboard.press("Escape");
 
     await page.getByRole("button", { name: "Pin", exact: true }).first().click();
