@@ -1,0 +1,182 @@
+# Golden questions. `reference` is the call that answers the question correctly (recipe format, replayed as the
+# persona at eval time); `story` assertions encode the planted stories and must hold on the reference rows.
+- id: open_breaks_by_region_emea
+  persona: cash_ops_emea
+  question: How many open breaks do we have by region?
+  reference: {tool: run_metric, args: {metric_id: open_breaks, dimensions: [region]}}
+  expect: {metric_id: open_breaks}
+- id: aged_usd_breaks_by_entity_head
+  persona: head_data
+  question: Which legal entity has the most USD breaks open longer than 5 days?
+  reference: {tool: run_metric, args: {metric_id: aged_open_breaks, dimensions: [legal_entity_id], filters: {ccy: USD}}}
+  expect:
+    metric_id: aged_open_breaks
+    story: [{top: {by: value, key: legal_entity_id, equals: LE00016}}]
+- id: aged_usd_breaks_by_entity_emea
+  persona: cash_ops_emea
+  question: Which of our legal entities has the most aged USD nostro breaks?
+  reference: {tool: run_metric, args: {metric_id: aged_open_breaks, dimensions: [legal_entity_id], filters: {ccy: USD}}}
+  expect:
+    metric_id: aged_open_breaks
+    story: [{top: {by: value, key: legal_entity_id, equals: LE00016}}]
+- id: open_breaks_by_entity_emea
+  persona: cash_ops_emea
+  question: Show open breaks by legal entity.
+  reference: {tool: run_metric, args: {metric_id: open_breaks, dimensions: [legal_entity_id]}}
+  expect:
+    metric_id: open_breaks
+    story: [{top: {by: value, key: legal_entity_id, equals: LE00016}}]
+- id: open_break_amount_by_ccy
+  persona: cash_ops_emea
+  question: What is the open break amount by currency?
+  reference: {tool: run_metric, args: {metric_id: open_break_amount, dimensions: [ccy]}}
+  expect: {metric_id: open_break_amount}
+- id: open_break_amount_usd_by_entity
+  persona: head_data
+  question: What is the open USD break amount by legal entity?
+  reference: {tool: run_metric, args: {metric_id: open_break_amount, dimensions: [ccy, legal_entity_id], filters: {ccy: USD}}}
+  expect: {metric_id: open_break_amount}
+- id: auto_match_rate_by_region
+  persona: head_data
+  question: What is the auto-match rate by region?
+  reference: {tool: run_metric, args: {metric_id: auto_match_rate, dimensions: [region]}}
+  expect: {metric_id: auto_match_rate, chart_types: [bar, table, kpi]}
+- id: break_resolution_rate_by_type
+  persona: cash_ops_emea
+  question: What is the break resolution rate by break type?
+  reference: {tool: run_metric, args: {metric_id: break_resolution_rate, dimensions: [break_type]}}
+  expect: {metric_id: break_resolution_rate}
+- id: avg_break_age_by_ccy
+  persona: cash_ops_emea
+  question: What is the average break age by currency?
+  reference: {tool: run_metric, args: {metric_id: avg_break_age, dimensions: [ccy]}}
+  expect: {metric_id: avg_break_age}
+- id: manual_matches_by_rule
+  persona: head_data
+  question: How many manual matches were made under each match rule?
+  reference: {tool: run_metric, args: {metric_id: manual_matches, dimensions: [rule_id]}}
+  expect: {metric_id: manual_matches}
+- id: open_breaks_by_type_bi
+  persona: bi_analyst
+  question: Break down open breaks by break type.
+  reference: {tool: run_metric, args: {metric_id: open_breaks, dimensions: [break_type]}}
+  expect: {metric_id: open_breaks}
+- id: late_feeds_by_source_last_week
+  persona: head_data
+  question: Which source had the most late feeds since 23 September?
+  reference: {tool: run_metric, args: {metric_id: late_feeds, dimensions: [source_id], filters: {business_date: {gte: "2026-09-23"}}}}
+  expect:
+    metric_id: late_feeds
+    story: [{top: {by: value, key: source_id, equals: SRC001}}]
+- id: late_feeds_custodians_growth
+  persona: invest_ops_growth
+  question: Which custodian has had the most late feeds since 23 September?
+  reference: {tool: run_metric, args: {metric_id: late_feeds, dimensions: [source_id], filters: {business_date: {gte: "2026-09-23"}}}}
+  expect:
+    metric_id: late_feeds
+    story: [{top: {by: value, key: source_id, equals: SRC001}}]
+- id: feed_on_time_rate_by_source_type
+  persona: head_data
+  question: What is the feed on-time rate by source type?
+  reference: {tool: run_metric, args: {metric_id: feed_on_time_rate, dimensions: [source_type]}}
+  expect: {metric_id: feed_on_time_rate}
+- id: open_support_tickets_by_category
+  persona: cash_ops_emea
+  question: How many support tickets are open, by category?
+  reference: {tool: run_metric, args: {metric_id: open_support_tickets, dimensions: [category]}}
+  expect: {metric_id: open_support_tickets}
+- id: missing_deliveries_by_status
+  persona: head_data
+  question: How many feed deliveries were missing or failed, by status?
+  reference: {tool: run_metric, args: {metric_id: missing_or_failed_deliveries, dimensions: [status]}}
+  expect: {metric_id: missing_or_failed_deliveries}
+- id: avg_feed_latency_by_source_type
+  persona: bi_analyst
+  question: What is the average feed latency in minutes by source type?
+  reference: {tool: run_metric, args: {metric_id: avg_feed_latency_min, dimensions: [source_type]}}
+  expect: {metric_id: avg_feed_latency_min}
+- id: price_conflicts_vendor_corp_bonds
+  persona: steward
+  question: Which price vendor drives the most corporate bond price conflicts?
+  reference: {tool: run_metric, args: {metric_id: price_conflicts, dimensions: [vendor_id, asset_class]}}
+  expect:
+    metric_id: price_conflicts
+    story: [{top: {by: value, key: vendor_id, equals: V_A, where: {asset_class: Corp bond}}}]
+- id: price_conflicts_by_asset_class
+  persona: head_data
+  question: How many price conflicts are there by asset class?
+  reference: {tool: run_metric, args: {metric_id: price_conflicts, dimensions: [asset_class]}}
+  expect: {metric_id: price_conflicts}
+- id: open_dq_exceptions_by_domain
+  persona: steward
+  question: How many data quality exceptions are open, by domain?
+  reference: {tool: run_metric, args: {metric_id: open_dq_exceptions, dimensions: [domain]}}
+  expect: {metric_id: open_dq_exceptions}
+- id: dq_exceptions_by_asset_class
+  persona: bi_analyst
+  question: What is the total number of data quality exceptions by asset class?
+  reference: {tool: run_metric, args: {metric_id: dq_exceptions_total, dimensions: [asset_class]}}
+  expect: {metric_id: dq_exceptions_total}
+- id: nav_breaches_by_portfolio
+  persona: head_data
+  question: Which portfolios had NAV breaches above 5 basis points?
+  reference: {tool: run_metric, args: {metric_id: nav_breaches_above_5bps, dimensions: [portfolio_id]}}
+  expect:
+    metric_id: nav_breaches_above_5bps
+    story: [{contains: {portfolio_id: PF003}}, {contains: {portfolio_id: PF009}}]
+- id: nav_break_bps_max_by_portfolio
+  persona: head_data
+  question: What is the largest NAV break in basis points for each portfolio?
+  reference: {tool: run_metric, args: {metric_id: nav_break_bps_max, dimensions: [portfolio_id]}}
+  expect: {metric_id: nav_break_bps_max}
+- id: open_position_exceptions_by_cause
+  persona: invest_ops_growth
+  question: How many position exceptions are open, by cause?
+  reference: {tool: run_metric, args: {metric_id: open_position_exceptions, dimensions: [cause_code]}}
+  expect: {metric_id: open_position_exceptions}
+- id: position_exceptions_late_custodian
+  persona: head_data
+  question: Which portfolios had the most position exceptions since 23 September?
+  reference: {tool: run_metric, args: {metric_id: position_exceptions, dimensions: [portfolio_id], filters: {business_date: {gte: "2026-09-23"}}}}
+  expect:
+    metric_id: position_exceptions
+    story: [{contains: {portfolio_id: PF001}}]
+- id: exception_mv_by_fund_group
+  persona: head_data
+  question: What is the absolute market value of position exceptions by fund group?
+  reference: {tool: run_metric, args: {metric_id: exception_mv_abs, dimensions: [fund_group]}}
+  expect: {metric_id: exception_mv_abs}
+- id: clean_recon_run_rate_by_type
+  persona: invest_ops_growth
+  question: What share of recon runs were clean, by recon type?
+  reference: {tool: run_metric, args: {metric_id: clean_recon_run_rate, dimensions: [recon_type]}}
+  expect: {metric_id: clean_recon_run_rate}
+- id: recon_unmatched_by_fund_group
+  persona: bi_analyst
+  question: How many recon items are unmatched by fund group?
+  reference: {tool: run_metric, args: {metric_id: recon_unmatched_items, dimensions: [fund_group]}}
+  expect: {metric_id: recon_unmatched_items}
+- id: late_feeds_vs_tickets_by_source
+  persona: head_data
+  question: For each source, compare late feeds since 23 September with its open support tickets.
+  reference:
+    tool: combine
+    args:
+      sql: SELECT a.source_id, a.value AS late_feeds, coalesce(b.value, 0) AS open_tickets FROM a LEFT JOIN b ON a.source_id = b.source_id
+      inputs:
+        a: {tool: run_metric, args: {metric_id: late_feeds, dimensions: [source_id], filters: {business_date: {gte: "2026-09-23"}}}}
+        b: {tool: run_metric, args: {metric_id: open_support_tickets, dimensions: [source_id]}}
+  expect:
+    metric_id: late_feeds
+    story: [{top: {by: late_feeds, key: source_id, equals: SRC001}}]
+- id: open_breaks_and_match_rate_by_region
+  persona: head_data
+  question: Show open breaks next to the auto-match rate for each region.
+  reference:
+    tool: combine
+    args:
+      sql: SELECT a.region, a.value AS open_breaks, b.value AS auto_match_rate FROM a JOIN b ON a.region = b.region
+      inputs:
+        a: {tool: run_metric, args: {metric_id: open_breaks, dimensions: [region]}}
+        b: {tool: run_metric, args: {metric_id: auto_match_rate, dimensions: [region]}}
+  expect: {metric_id: open_breaks}
