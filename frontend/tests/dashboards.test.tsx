@@ -55,4 +55,37 @@ describe("DashboardsMenu", () => {
     expect(btn).toBeDisabled();
     expect(btn).toHaveAttribute("title", "A dashboard holds at most 8 widgets. Unpin some to save.");
   });
+
+  it("shows no error message when the session has expired (Unauthorized)", async () => {
+    const { Unauthorized } = await import("@/lib/api");
+    const row = { id: "d1", title: "Morning check", created_at: "2026-10-01T09:00:00Z", widget_count: 2 };
+    // list fails
+    dashboards.list.mockRejectedValue(new Unauthorized());
+    const a = render(<DashboardsMenu pinned={[{ widget, recipe }]} onOpen={vi.fn()} />);
+    await userEvent.click(screen.getByRole("button", { name: "Dashboards" }));
+    await waitFor(() => expect(dashboards.list).toHaveBeenCalled());
+    expect(screen.queryByRole("status")).toBeNull();
+    a.unmount();
+    // save fails
+    dashboards.list.mockResolvedValue([row]);
+    dashboards.save.mockRejectedValue(new Unauthorized());
+    const b = render(<DashboardsMenu pinned={[{ widget, recipe }]} onOpen={vi.fn()} />);
+    await userEvent.click(screen.getByRole("button", { name: "Save pinned (1)" }));
+    await userEvent.type(screen.getByRole("textbox", { name: "Dashboard title" }), "x");
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(dashboards.save).toHaveBeenCalled());
+    expect(screen.queryByText(/could not be saved/)).toBeNull();
+    b.unmount();
+    // run and remove fail
+    dashboards.run.mockRejectedValue(new Unauthorized());
+    dashboards.remove.mockRejectedValue(new Unauthorized());
+    render(<DashboardsMenu pinned={[]} onOpen={vi.fn()} />);
+    await userEvent.click(screen.getByRole("button", { name: "Dashboards" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Open Morning check" }));
+    await waitFor(() => expect(dashboards.run).toHaveBeenCalled());
+    await userEvent.click(screen.getByRole("button", { name: "Dashboards" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Delete Morning check" }));
+    await waitFor(() => expect(dashboards.remove).toHaveBeenCalled());
+    expect(screen.queryByRole("status")).toBeNull();
+  });
 });

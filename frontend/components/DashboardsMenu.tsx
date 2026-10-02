@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { useSession } from "@/components/SessionProvider";
-import { ApiError, api } from "@/lib/api";
+import { ApiError, Unauthorized, api } from "@/lib/api";
 import type { DashboardRun, DashboardSummary, Recipe, Widget } from "@/lib/schemas";
 
 const MAX_ITEMS = 8;
@@ -22,7 +22,7 @@ export function DashboardsMenu({ pinned, onOpen }:
 
   async function refresh() {
     try { setList(await call((t) => api.dashboards.list(t))); }
-    catch { setMessage("Dashboards are unavailable right now."); }
+    catch (e) { if (e instanceof Unauthorized) return; setMessage("Dashboards are unavailable right now."); }
   }
 
   async function save() {
@@ -34,6 +34,7 @@ export function DashboardsMenu({ pinned, onOpen }:
       setMessage("Dashboard saved.");
       if (open) await refresh();
     } catch (e) {
+      if (e instanceof Unauthorized) return;
       setSaveError(e instanceof ApiError && e.status === 409 ? "You already have 20 dashboards. Delete one first."
         : "The dashboard could not be saved. Please try again.");
     }
@@ -42,12 +43,12 @@ export function DashboardsMenu({ pinned, onOpen }:
   async function openOne(d: DashboardSummary) {
     setOpen(false);
     try { onOpen(await call((t) => api.dashboards.run(t, d.id))); }
-    catch { setMessage("The dashboard could not be opened. Please try again."); }
+    catch (e) { if (e instanceof Unauthorized) return; setMessage("The dashboard could not be opened. Please try again."); }
   }
 
   async function remove(d: DashboardSummary) {
     try { await call((t) => api.dashboards.remove(t, d.id)); await refresh(); }
-    catch { setMessage("The dashboard could not be deleted. Please try again."); }
+    catch (e) { if (e instanceof Unauthorized) return; setMessage("The dashboard could not be deleted. Please try again."); }
   }
 
   return (
