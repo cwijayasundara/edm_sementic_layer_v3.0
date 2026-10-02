@@ -85,3 +85,14 @@ export const DashboardRun = z.object({ id: z.string(), title: z.string(), widget
 export type DashboardRun = z.infer<typeof DashboardRun>;
 export const DevToken = z.object({ token: z.string() });
 export type DevToken = z.infer<typeof DevToken>;
+
+export const LINEAGE_KINDS = ["Result", "Metric", "Source", "Dimension", "Table", "Endpoint", "BusinessTerm", "Column",
+  "Field", "Question"] as const;
+export type LineageKind = (typeof LINEAGE_KINDS)[number];
+export const LineageNode = z.object({ id: z.string(), kind: z.enum(LINEAGE_KINDS), label: z.string(),
+  source: z.string().optional(), detail: z.string().optional() });
+export type LineageNode = z.infer<typeof LineageNode>;
+export const LineageEdge = z.object({ from: z.string(), to: z.string(), type: z.string() });
+export const Lineage = z.object({ nodes: z.array(LineageNode), edges: z.array(LineageEdge), truncated: z.boolean(),
+  governed: z.boolean() });
+export type Lineage = z.infer<typeof Lineage>;

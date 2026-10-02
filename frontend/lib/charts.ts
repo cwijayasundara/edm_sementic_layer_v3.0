@@ -24,7 +24,7 @@ export function axisName(column: string | null | undefined): string | undefined 
 }
 
 /** `hex` mixed toward white: the colour of the bars that are not the largest. */
-function tint(hex: string, amount = 0.55): string {
+export function tint(hex: string, amount = 0.55): string {
   const n = parseInt(hex.slice(1), 16);
   const mix = (c: number) => Math.round(c + (255 - c) * amount).toString(16).padStart(2, "0");
   return `#${mix(n >> 16)}${mix((n >> 8) & 255)}${mix(n & 255)}`;

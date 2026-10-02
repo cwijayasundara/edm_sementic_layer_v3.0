@@ -1,6 +1,6 @@
 import { parseSse } from "@/lib/sse";
 import {
-  type ChatEvent, DashboardList, DashboardRun, type DashboardSummary, DevToken, KpisResponse, type KpiTile,
+  type ChatEvent, DashboardList, DashboardRun, type DashboardSummary, DevToken, KpisResponse, type KpiTile, Lineage,
   type Recipe, ResultPage, type Widget,
 } from "@/lib/schemas";
 
@@ -52,6 +52,9 @@ export const api = {
     const res = await request("/chat", { token, method: "POST", body: { question }, signal });
     if (!res.body) throw new ApiError(0);
     yield* parseSse(res.body);
+  },
+  async lineage(token: string, handle: string): Promise<Lineage> {
+    return Lineage.parse(await json(await request(`/lineage/${encodeURIComponent(handle)}`, { token })));
   },
   dashboards: {
     async list(token: string): Promise<DashboardSummary[]> {
