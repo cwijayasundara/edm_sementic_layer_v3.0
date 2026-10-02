@@ -1,4 +1,4 @@
-"""The Semantic Gateway's seven tools, independent of the MCP transport (prism.gateway.server wires them up).
+"""The Semantic Gateway's eight tools, independent of the MCP transport (prism.gateway.server wires them up).
 
 `Gateway.call_tool(name, claims, arguments)` is the single entry point. `claims` are the VERIFIED token claims (the
 caller's identity never comes from tool arguments). Every call, including unknown tools, invalid arguments, refusals,
@@ -48,7 +48,8 @@ from prism.graph.retrieval import GraphError, GraphUnavailable
 
 log = logging.getLogger("prism.gateway")
 
-TOOLS = ("search_context", "run_metric", "query_source", "get_rows", "combine", "record_answer", "confirm_answer")
+TOOLS = ("search_context", "run_metric", "query_source", "get_rows", "combine", "record_answer", "confirm_answer",
+         "lineage")
 MAX_QUESTION_CHARS = 2000
 MAX_PLAN_CHARS = 4000
 MAX_ITEMS = 20
@@ -80,6 +81,8 @@ QUERY_SHAPE = ('query_source takes request={"sql": "SELECT ..."} for SQL sources
                'request={"endpoint_id": "...", "params": {...}} for REST sources')
 
 ContextFn = Callable[[str, dict, int], Awaitable[dict]]
+# plans (metric id -> dimensions used), free-form sources, claims (metrics_only fail-closed), combine root targets
+LineageFn = Callable[[dict[str, set[str]], list[str], dict, list[str] | None], Awaitable[dict]]
 
 
 # ------------------------------------------------------------------------------------------------ arguments
@@ -136,10 +139,14 @@ class ConfirmAnswerArgs(_Args):
                                     description="The record_id record_answer returned for this answer")]
 
 
+class LineageArgs(_Args):
+    handle: Annotated[str, Field(min_length=1, max_length=64, description="One of your own result handles")]
+
+
 ARG_MODELS: dict[str, type[_Args]] = {
     "search_context": SearchContextArgs, "run_metric": RunMetricArgs, "query_source": QuerySourceArgs,
     "get_rows": GetRowsArgs, "combine": CombineArgs, "record_answer": RecordAnswerArgs,
-    "confirm_answer": ConfirmAnswerArgs,
+    "confirm_answer": ConfirmAnswerArgs, "lineage": LineageArgs,
 }
 _JSON_FIELDS = {name: {f for f, info in model.model_fields.items() if info.annotation is not str}
                 for name, model in ARG_MODELS.items()}
@@ -194,13 +201,14 @@ def _error(tool: str, code: str, message: str) -> CallToolResult:
 # ------------------------------------------------------------------------------------------------ gateway
 class Gateway:
     def __init__(self, settings, *, policy: Policy, store: ResultStore, downstream, audit, context: ContextFn,
-                 context_timeout_s: float = CONTEXT_TIMEOUT_S,
+                 lineage: LineageFn | None = None, context_timeout_s: float = CONTEXT_TIMEOUT_S,
                  catalog_probe: Callable[[], Awaitable[int | None]] | None = None,
                  catalog_loader: Callable[[], Awaitable[Catalog]] | None = None,
                  refresh_s: float | None = None):
         self.settings = settings
         self.policy = policy   # replaced as a whole on catalog refresh; each call reads it once
         self.store, self.downstream, self.audit, self.context = store, downstream, audit, context
+        self.lineage = lineage
         self.context_timeout_s = context_timeout_s
         self.catalog_probe, self.catalog_loader = catalog_probe, catalog_loader
         self.refresh_s = refresh_s if refresh_s is not None else settings.gateway_catalog_refresh_s
@@ -376,6 +384,24 @@ class Gateway:
             raise GatewayError("not_confirmable", "this answer cannot be confirmed")
         return {"confirmed": True}
 
+    async def _lineage(self, claims: dict, args: LineageArgs, rec: CallRecord) -> dict:
+        sub = claims["sub"]
+        plans, sources, combined = self._lineage_plan(sub, args.handle)   # unknown_handle before any graph read
+        rec.fields["result_handle"] = args.handle
+        if self.lineage is None:
+            raise GatewayError("context_unavailable", "the context graph is unavailable; try again shortly")
+        safe = {**claims, "metrics_only": is_metrics_only(claims)}
+        release = await self.context_limiter.acquire(sub)   # graph reads share the search_context budget
+        try:
+            async with asyncio.timeout(self.context_timeout_s):
+                graph = await self.lineage(plans, sources, safe, combined)
+        except (TimeoutError, GraphUnavailable, GraphError):
+            raise GatewayError("context_unavailable", "the context graph is unavailable; try again shortly") from None
+        finally:
+            release()
+        rec.fields["rows"] = len(graph["nodes"])
+        return {**graph, "governed": bool(plans)}
+
     def _metric_backed(self, sub: str, handle: str, depth: int = 0) -> bool:
         """True when `handle` is a run_metric result whose recorded plan names >= 1 catalog metric (all of them in the
         catalog), or a combine whose every input is still stored and itself metric-backed. Fails closed: a
@@ -423,6 +449,41 @@ class Gateway:
             if isinstance(inputs, (list, tuple)):
                 todo.extend(i for i in inputs if isinstance(i, str))
         return sorted(metrics), sorted(dims)
+
+    def _lineage_plan(self, sub: str, handle: str) -> tuple[dict[str, set[str]], list[str], list[str] | None]:
+        """Per-metric dimensions and the sources of free-form results behind `handle` (combine outputs: through
+        their inputs that are still stored; an expired input is skipped), plus, for a combine, the local uids its
+        root links to. Raises unknown_handle for another caller's, an expired or a made-up handle."""
+        top = self.store.get(sub, handle)
+        catalog = self.policy.catalog
+        plans: dict[str, set[str]] = {}
+        sources: set[str] = set()
+        seen: set[str] = set()
+        todo = [handle]
+        while todo and len(seen) < 64:
+            h = todo.pop()
+            if h in seen:
+                continue
+            seen.add(h)
+            try:
+                entry = self.store.get(sub, h)
+            except GatewayError:
+                continue
+            plan, inputs, source = entry.meta.get("plan"), entry.meta.get("inputs"), entry.meta.get("source")
+            if isinstance(plan, dict):
+                for mid in plan.get("metric_ids") or ():
+                    metric = catalog.metrics.get(mid)
+                    if metric is not None:
+                        plans.setdefault(mid, set()).update(
+                            d for d in plan.get("dimensions") or () if d in metric.dimensions)
+            elif isinstance(inputs, (list, tuple)):
+                todo.extend(i for i in inputs if isinstance(i, str))
+            elif isinstance(source, str):
+                sources.add(source)
+        combined = None
+        if isinstance(top.meta.get("inputs"), (list, tuple)):
+            combined = [f"metric:{m}" for m in sorted(plans)] + [f"source:{s}" for s in sorted(sources)]
+        return plans, sorted(sources), combined
 
     # -------------------------------------------------------------------------------------------- catalog
     @property
@@ -489,4 +550,5 @@ class Gateway:
                 self._refresh_failed()
 
 
-__all__ = ["ARG_MODELS", "CallRecord", "Gateway", "MAX_ARGUMENT_BYTES", "QUERY_SHAPE", "TOOLS"]
+__all__ = ["ARG_MODELS", "CallRecord", "Gateway", "MAX_ARGUMENT_BYTES", "QUERY_SHAPE", "TOOLS", "LineageArgs",
+           "LineageFn"]

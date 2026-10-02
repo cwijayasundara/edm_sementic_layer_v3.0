@@ -2,7 +2,7 @@
 
 Same transport as the source servers (prism.mcp.base): stateless streamable HTTP with JSON responses, the SDK token
 verifier (audience `gateway-mcp`, HS256 from prism.security.tokens), an explicit Host allow-list. Requests over
-MAX_BODY_BYTES are refused with 413 before the JSON is parsed. The seven tools are in prism.gateway.service; this module
+MAX_BODY_BYTES are refused with 413 before the JSON is parsed. The eight tools are in prism.gateway.service; this module
 wires them to MCP, builds the runtime and refuses to start when a dependency is missing:
 
   uvicorn prism.gateway.server:create_app_from_env --factory --host 127.0.0.1 --port 8200
@@ -47,6 +47,7 @@ from prism.gateway.results import ResultStore
 from prism.gateway.service import ARG_MODELS, TOOLS, Gateway
 from prism.graph.catalog import Catalog, CatalogError, aload_catalog, load_catalog
 from prism.graph.embedder import Embedder, EmbedderError
+from prism.graph.lineage import alineage
 from prism.graph.retrieval import GraphError, GraphUnavailable, acontext_pack, arun_read
 from prism.mcp.auth import PrismTokenVerifier, current_claims
 
@@ -231,8 +232,14 @@ async def confirm_answer(record_id: str) -> CallToolResult:
     raise NotImplementedError
 
 
+async def lineage(handle: str) -> CallToolResult:
+    """The part of the context graph behind one of your own result handles (metric, dimensions, tables, columns,
+    source, terms, past questions), filtered to what your role may see. For the UI; never needed to answer."""
+    raise NotImplementedError
+
+
 _TOOL_FUNCS = {f.__name__: f for f in (search_context, run_metric, query_source, get_rows, combine, record_answer,
-                                       confirm_answer)}
+                                       confirm_answer, lineage)}
 WRITE_TOOLS = frozenset({"record_answer", "confirm_answer"})
 
 
@@ -395,8 +402,13 @@ def prepare_runtime(settings: Settings) -> Runtime:
                             max_bytes_per_sub=settings.gateway_store_per_sub_mb * 2**20)
         # audit=None: the Gateway writes the one audit row per tool call (service.py); Downstream writes per-source
         # `source.<tool>` rows only when handed a writer (tests), so the running gateway records no source.* rows.
+        async def lineage_fn(plans, sources, claims, combined):
+            return await alineage(adriver, plans, sources, claims, combined_inputs=combined, ns=settings.graph_ns,
+                                  timeout_s=timeout)
+
         gateway = Gateway(settings, policy=Policy(catalog), store=store, downstream=Downstream(settings, audit=None),
-                          audit=audit, context=context, catalog_probe=probe, catalog_loader=loader)
+                          audit=audit, context=context, lineage=lineage_fn, catalog_probe=probe,
+                          catalog_loader=loader)
 
         async def close() -> None:
             try:

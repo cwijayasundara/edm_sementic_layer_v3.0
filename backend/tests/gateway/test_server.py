@@ -17,6 +17,7 @@ from pydantic import SecretStr
 import uvicorn
 from mcp.types import CallToolResult, TextContent
 
+from prism.agent.prompts import GATEWAY_TOOL_NAMES
 from prism.config import DEV_SECRET_FIELDS, Settings
 from prism.gateway import server as gateway_server
 from prism.gateway import service as gateway_service
@@ -172,11 +173,12 @@ async def test_tool_list_is_exactly_the_gateway_tools(settings, fake_catalog):
     async with gateway_client(settings, make_gateway(settings, fake_catalog)) as c:
         tools = {t.name: t for t in (await c.list_tools()).tools}
     assert set(tools) == {"search_context", "run_metric", "query_source", "get_rows", "combine", "record_answer",
-                          "confirm_answer"}
+                          "confirm_answer", "lineage"}
     assert TOOLS == ("search_context", "run_metric", "query_source", "get_rows", "combine", "record_answer",
-                     "confirm_answer")
+                     "confirm_answer", "lineage")
     assert "source" not in tools["run_metric"].input_schema["properties"]  # the catalog decides the source
     assert set(tools["get_rows"].input_schema["properties"]) == {"handle", "offset", "limit"}
+    assert set(tools["lineage"].input_schema["properties"]) == {"handle"}
     for t in tools.values():  # identity never comes from arguments
         assert not {"sub", "user", "user_id", "roles", "scopes", "token"} & set(t.input_schema["properties"])
 
@@ -1138,3 +1140,95 @@ def test_startup_messages_never_print_neo4j_credentials(monkeypatch):
     with pytest.raises(GatewayStartupError) as exc:
         gateway_server.prepare_runtime(s)
     assert "hunter2" not in str(exc.value) and "127.0.0.1:1" in str(exc.value)
+
+
+GRAPH = {"nodes": [{"id": "metric:open_breaks", "kind": "Metric", "label": "open_breaks"}], "edges": [],
+         "truncated": False}
+
+
+class FakeLineage:
+    def __init__(self, result=GRAPH):
+        self.calls: list[tuple] = []
+        self.result = result
+
+    async def __call__(self, plans, sources, claims, combined):
+        self.calls.append(({k: set(v) for k, v in plans.items()}, list(sources), dict(claims), combined))
+        if isinstance(self.result, Exception):
+            raise self.result
+        return self.result
+
+
+async def test_lineage_resolves_the_handles_metric_and_dimensions(settings, fake_catalog):
+    fake, audit = FakeLineage(), FakeAudit()
+    gw = make_gateway(settings, fake_catalog, audit=audit, lineage=fake)
+    async with gateway_client(settings, gw, "cash_ops_emea") as c:
+        h = body(await c.call_tool("run_metric", {"metric_id": "open_breaks", "dimensions": ["region"]}))["handle"]
+        out = body(await c.call_tool("lineage", {"handle": h}))
+    assert out == {**GRAPH, "governed": True}
+    (plans, sources, claims, combined), = fake.calls
+    assert plans == {"open_breaks": {"region"}} and sources == [] and combined is None
+    assert claims["sub"] == "cash_ops_emea" and claims["metrics_only"] is False
+    assert [(r["tool"], r["status"]) for r in audit.rows][-1] == ("lineage", "ok")
+
+
+async def test_lineage_refuses_another_callers_handle_like_an_expired_one(settings, fake_catalog):
+    fake = FakeLineage()
+    gw = make_gateway(settings, fake_catalog, lineage=fake)
+    _, app = create_app(settings, gateway=gw)
+    async with serving(app) as base:
+        async with mcp_client(f"{base}/mcp", token(settings, "head_data")) as head:
+            h = body(await head.call_tool("run_metric", {"metric_id": "open_breaks"}))["handle"]
+        async with mcp_client(f"{base}/mcp", token(settings, "cash_ops_emea")) as other:
+            r = await other.call_tool("lineage", {"handle": h})
+            gone = await other.call_tool("lineage", {"handle": "r_000000000000"})
+    assert r.is_error and "unknown_handle" in text(r)
+    assert gone.is_error and text(gone) == text(r)          # another caller's handle reads exactly like a made-up one
+    assert fake.calls == []
+
+
+async def test_lineage_of_a_free_form_result_names_only_its_source(settings, fake_catalog):
+    fake = FakeLineage({"nodes": [], "edges": [], "truncated": False})
+    gw = make_gateway(settings, fake_catalog, lineage=fake)
+    async with gateway_client(settings, gw, "head_data") as c:
+        q = body(await c.call_tool("query_source", {"source": "cashrecon", "request": {"sql": "SELECT 1"}}))["handle"]
+        out = body(await c.call_tool("lineage", {"handle": q}))
+    assert out["governed"] is False
+    assert fake.calls[0][:2] == ({}, ["cashrecon"]) and fake.calls[0][3] is None
+
+
+async def test_lineage_of_a_combine_merges_inputs_and_names_the_root_targets(settings, fake_catalog):
+    fake = FakeLineage()
+    gw = make_gateway(settings, fake_catalog, lineage=fake)
+    async with gateway_client(settings, gw, "cash_ops_emea") as c:
+        h1 = body(await c.call_tool("run_metric", {"metric_id": "open_breaks", "dimensions": ["region"]}))["handle"]
+        h2 = body(await c.call_tool("run_metric", {"metric_id": "aged_open_breaks", "dimensions": ["ccy"]}))["handle"]
+        h3 = body(await c.call_tool("combine", {"sql": "SELECT count(*) AS n FROM a, b", "handles": {"a": h1, "b": h2}}))["handle"]
+        body(await c.call_tool("lineage", {"handle": h3}))
+    plans, sources, _, combined = fake.calls[0]
+    assert plans == {"open_breaks": {"region"}, "aged_open_breaks": {"ccy"}} and sources == []
+    assert combined == ["metric:aged_open_breaks", "metric:open_breaks"]
+
+
+async def test_lineage_combine_skips_expired_inputs(settings, fake_catalog):
+    fake, store = FakeLineage(), ResultStore()
+    gw = make_gateway(settings, fake_catalog, lineage=fake, store=store)
+    async with gateway_client(settings, gw, "cash_ops_emea") as c:
+        h1 = body(await c.call_tool("run_metric", {"metric_id": "open_breaks", "dimensions": ["region"]}))["handle"]
+        h3 = body(await c.call_tool("combine", {"sql": "SELECT count(*) AS n FROM a", "handles": {"a": h1}}))["handle"]
+        store._drop(h1)     # the input expired; the combine output is still live
+        out = body(await c.call_tool("lineage", {"handle": h3}))
+    assert out["governed"] is False and fake.calls[0][0] == {} and fake.calls[0][3] == []
+
+
+async def test_lineage_passes_metrics_only_and_maps_graph_outages(settings, fake_catalog):
+    fake = FakeLineage(GraphUnavailable("down"))
+    gw = make_gateway(settings, fake_catalog, lineage=fake)
+    async with gateway_client(settings, gw, "bi_analyst") as c:
+        h = body(await c.call_tool("run_metric", {"metric_id": "open_breaks"}))["handle"]
+        r = await c.call_tool("lineage", {"handle": h})
+    assert r.is_error and "context_unavailable" in text(r) and "down" not in text(r)
+    assert fake.calls[0][2]["metrics_only"] is True
+
+
+def test_lineage_is_never_offered_to_the_llm():
+    assert "lineage" not in GATEWAY_TOOL_NAMES
