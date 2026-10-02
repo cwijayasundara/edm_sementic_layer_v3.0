@@ -54,3 +54,6 @@ docs/superpowers/spikes/**/*_output.txt
 # Frontend test artefacts
 frontend/test-results/
 frontend/playwright-report/
+
+# Local UI screenshots (frontend/e2e/zz_shots.spec.ts output)
+.shots/

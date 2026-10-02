@@ -1,13 +1,15 @@
 "use client";
+import { BookmarkPlus, LayoutGrid, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { useSession } from "@/components/SessionProvider";
 import { ApiError, Unauthorized, api } from "@/lib/api";
 import type { DashboardRun, DashboardSummary, Recipe, Widget } from "@/lib/schemas";
 
 const MAX_ITEMS = 8;
+const HEADER_BTN = "inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-[0.8rem] font-medium text-white/85 transition-colors hover:bg-white/10 hover:text-white disabled:pointer-events-none disabled:opacity-40 aria-expanded:bg-white/10";
 
 export function DashboardsMenu({ pinned, onOpen }:
   { pinned: { widget: Widget; recipe: Recipe }[]; onOpen: (run: DashboardRun) => void }) {
@@ -52,30 +54,40 @@ export function DashboardsMenu({ pinned, onOpen }:
   }
 
   return (
-    <div className="relative flex items-center gap-2">
-      <Button size="sm" variant="secondary" disabled={pinned.length === 0 || tooMany}
+    <div className="relative flex items-center gap-1.5">
+      {message && <span role="status" className="text-xs text-white/75">{message}</span>}
+      <button type="button" className={HEADER_BTN} disabled={pinned.length === 0 || tooMany}
         title={tooMany ? "A dashboard holds at most 8 widgets. Unpin some to save." : undefined}
-        onClick={() => { setMessage(null); setSaveError(null); setSaving(true); }}>Save pinned ({pinned.length})</Button>
-      <Button size="sm" variant="secondary" aria-expanded={open}
-        onClick={() => { const next = !open; setOpen(next); if (next) void refresh(); }}>Dashboards</Button>
-      {message && <span role="status" className="text-xs">{message}</span>}
+        onClick={() => { setMessage(null); setSaveError(null); setSaving(true); }}>
+        <BookmarkPlus className="size-4" aria-hidden />Save pinned ({pinned.length})</button>
+      <button type="button" className={HEADER_BTN} aria-expanded={open}
+        onClick={() => { const next = !open; setOpen(next); if (next) void refresh(); }}>
+        <LayoutGrid className="size-4" aria-hidden />Dashboards</button>
       {open && (
-        <div className="absolute right-0 top-10 z-20 w-80 rounded-md border bg-white p-2 text-sm text-foreground shadow-lg">
-          {list === null ? <p className="p-2 text-muted-foreground">Loading…</p>
-            : list.length === 0 ? <p className="p-2 text-muted-foreground">No saved dashboards yet. Pin widgets, then save.</p>
-            : <ul>{list.map((d) => (
-              <li key={d.id} className="flex items-center justify-between gap-2 rounded px-2 py-1 hover:bg-slate-50">
-                <button className="flex-1 text-left" aria-label={`Open ${d.title}`} onClick={() => void openOne(d)}>
-                  {d.title} <span className="text-xs text-muted-foreground">({d.widget_count})</span></button>
-                <button aria-label={`Delete ${d.title}`} className="text-xs text-[var(--prism-crimson)]"
-                  onClick={() => void remove(d)}>Delete</button>
+        <div className="fixed inset-x-4 top-20 z-40 sm:absolute sm:inset-x-auto sm:right-0 sm:top-11 sm:w-[22rem] overflow-hidden rounded-lg border bg-white text-sm text-foreground shadow-[0_12px_32px_-8px_rgba(20,33,61,0.28)]">
+          <p className="border-b px-3 py-2.5 text-xs font-medium text-muted-foreground">Saved dashboards</p>
+          {list === null ? <p className="px-3 py-4 text-muted-foreground">Loading…</p>
+            : list.length === 0 ? <p className="px-3 py-4 text-muted-foreground">No saved dashboards yet. Pin widgets, then save.</p>
+            : <ul className="max-h-80 overflow-y-auto py-1">{list.map((d) => (
+              <li key={d.id} className="group flex items-center gap-2 px-1.5">
+                <button className="flex min-w-0 flex-1 items-center justify-between gap-3 rounded-md px-2 py-2 text-left hover:bg-muted"
+                  aria-label={`Open ${d.title}`} onClick={() => void openOne(d)}>
+                  <span className="truncate font-medium">{d.title}</span>
+                  <span className="shrink-0 text-xs text-muted-foreground">{d.widget_count} widgets</span></button>
+                <button aria-label={`Delete ${d.title}`} title="Delete"
+                  className="grid size-7 shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-[#fbecef] hover:text-[var(--prism-crimson)]"
+                  onClick={() => void remove(d)}><Trash2 className="size-3.5" aria-hidden /></button>
               </li>))}</ul>}
         </div>
       )}
       <Dialog open={saving} onOpenChange={setSaving}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Save pinned widgets</DialogTitle></DialogHeader>
-          <Input aria-label="Dashboard title" maxLength={80} value={title} onChange={(e) => setTitle(e.target.value)}
+          <DialogHeader>
+            <DialogTitle>Save pinned widgets</DialogTitle>
+            <DialogDescription>Saves the {pinned.length} pinned {pinned.length === 1 ? "widget" : "widgets"} as a dashboard you can reopen later.
+              It reruns each query when opened.</DialogDescription>
+          </DialogHeader>
+          <Input aria-label="Dashboard title" className="h-9" maxLength={80} value={title} onChange={(e) => setTitle(e.target.value)}
             placeholder="e.g. Morning cash check" />
           {saveError && <p className="text-sm text-[var(--prism-crimson)]">{saveError}</p>}
           <DialogFooter>

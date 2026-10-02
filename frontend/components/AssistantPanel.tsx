@@ -1,6 +1,6 @@
 "use client";
-import { ThumbsUp } from "lucide-react";
-import { useReducer, useRef, useState } from "react";
+import { ArrowUp, Check, CircleCheck, Loader2, MessageSquareText, Square, ThumbsUp } from "lucide-react";
+import { useEffect, useReducer, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useSession } from "@/components/SessionProvider";
 import { Unauthorized, api } from "@/lib/api";
@@ -21,16 +21,32 @@ export function planText(p: PlanEvent): string {
 export function TurnView({ turn, onConfirm }: { turn: Turn; onConfirm?: (turn: Turn) => void }) {
   const t = turn.telemetry;
   const a = turn.answer;
+  const streaming = turn.status === "streaming";
   return (
-    <li className="space-y-1 border-b pb-3">
-      <p className="font-medium">{turn.question}</p>
-      <ul className="text-xs text-muted-foreground">{turn.plan.map((p, i) => <li key={i}>{planText(p)}</li>)}</ul>
-      {turn.status === "streaming" && turn.summary === undefined && <p className="text-xs text-muted-foreground">Working…</p>}
-      {turn.summary !== undefined && <p className="text-sm">{turn.summary}</p>}
-      {turn.status === "error" && <p role="alert" className="text-sm text-[var(--prism-crimson)]">{turn.error}</p>}
+    <li className="space-y-2.5">
+      <p className="ml-6 rounded-lg rounded-tr-sm bg-[var(--prism-navy)] px-3 py-2 text-[0.9rem] text-white">{turn.question}</p>
+      {turn.plan.length > 0 && (
+        <ul className="space-y-1 text-xs text-muted-foreground">
+          {turn.plan.map((p, i) => {
+            const done = !streaming || i < turn.plan.length - 1;
+            return (
+              <li key={i} className="flex items-center gap-2">
+                {done ? <Check className="size-3.5 text-[var(--src-cashrecon)]" aria-hidden />
+                  : <Loader2 className="size-3.5 animate-spin" aria-hidden />}
+                <span>{planText(p)}</span>
+              </li>
+            );
+          })}
+        </ul>)}
+      {streaming && turn.summary === undefined && turn.plan.length === 0 && (
+        <p className="flex items-center gap-2 text-xs text-muted-foreground"><Loader2 className="size-3.5 animate-spin" aria-hidden />
+          <span>Working…</span></p>)}
+      {turn.summary !== undefined && <p className="text-[0.9rem] leading-relaxed text-[var(--prism-ink)]">{turn.summary}</p>}
+      {turn.status === "error" && <p role="alert" className="rounded-md bg-[#fbecef] px-3 py-2 text-sm text-[var(--prism-crimson)]">{turn.error}</p>}
       {turn.status === "stopped" && <p className="text-xs text-muted-foreground">Stopped</p>}
       {a?.confirmable && (a.state === "confirmed"
-        ? <p className="text-xs text-muted-foreground">Confirmed</p>
+        ? <p className="inline-flex items-center gap-1.5 text-xs font-medium text-[var(--src-cashrecon)]">
+            <CircleCheck className="size-3.5" aria-hidden /><span>Confirmed</span></p>
         : <div className="flex items-center gap-2">
             <Button type="button" variant="outline" size="sm" aria-label="Confirm this answer"
               disabled={a.state === "sending"} onClick={() => onConfirm?.(turn)}>
@@ -38,19 +54,26 @@ export function TurnView({ turn, onConfirm }: { turn: Turn; onConfirm?: (turn: T
             </Button>
             {a.state === "failed" && <p role="alert" className="text-xs text-[var(--prism-crimson)]">{CONFIRM_FAILED}</p>}
           </div>)}
-      {t && <p className="text-[11px] text-muted-foreground">
+      {t && <p className="text-[11px] text-[#8a93a3]">
         {t.path ?? "—"} · {nf.format(t.input_tokens + t.output_tokens)} tokens · {nf.format(t.cache_read_input_tokens)} cached · ~${t.cost_usd.toFixed(4)}
       </p>}
     </li>
   );
 }
 
-export function AssistantPanel({ onWidget }: { onWidget: (key: string, event: WidgetEvent, question: string) => void }) {
+export function AssistantPanel({ onWidget, examples = [] }:
+  { onWidget: (key: string, event: WidgetEvent, question: string) => void; examples?: readonly string[] }) {
   const { call } = useSession();
   const [turns, dispatch] = useReducer(chatReducer, []);
   const [question, setQuestion] = useState("");
   const active = useRef<{ id: string; ctrl: AbortController } | null>(null);
   const seq = useRef(0);
+  const box = useRef<HTMLTextAreaElement>(null);
+  const end = useRef<HTMLDivElement>(null);
+  const last = turns.at(-1);
+
+  useEffect(() => { end.current?.scrollIntoView?.({ block: "end" }); },
+    [turns.length, last?.plan.length, last?.summary, last?.status]);
 
   async function ask() {
     const q = question.trim();
@@ -99,16 +122,45 @@ export function AssistantPanel({ onWidget }: { onWidget: (key: string, event: Wi
 
   const busy = turns.some((t) => t.status === "streaming");
   return (
-    <div className="flex h-full flex-col gap-3">
-      <ol className="flex-1 space-y-3 overflow-y-auto">{turns.map((t) => <TurnView key={t.id} turn={t} onConfirm={confirmTurn} />)}</ol>
-      <form className="space-y-2" onSubmit={(e) => { e.preventDefault(); void ask(); }}>
-        <textarea aria-label="Question" className="w-full rounded-md border p-2 text-sm" rows={3}
-          maxLength={MAX_QUESTION} value={question} placeholder="Ask about your data…"
-          onChange={(e) => setQuestion(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void ask(); } }} />
-        <div className="flex justify-end gap-2">
-          {busy && <Button type="button" variant="outline" onClick={stop}>Stop</Button>}
-          <Button type="submit" disabled={busy || !question.trim()}>Ask</Button>
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+        {turns.length === 0 ? (
+          <div className="space-y-4">
+            <div className="flex items-start gap-3">
+              <span className="grid size-8 shrink-0 place-items-center rounded-md bg-[var(--accent)] text-[var(--prism-navy)]">
+                <MessageSquareText className="size-4" aria-hidden /></span>
+              <p className="text-sm leading-relaxed text-muted-foreground">
+                Ask in plain language. Answers come only from the sources your role can reach, and each chart lands on the canvas.</p>
+            </div>
+            {examples.length > 0 && (
+              <div>
+                <p className="mb-2 text-xs font-medium text-[var(--prism-muted)]">Try one of these</p>
+                <ul className="space-y-1.5">
+                  {examples.map((ex) => (
+                    <li key={ex}>
+                      <button type="button" onClick={() => { setQuestion(ex); box.current?.focus(); }}
+                        className="w-full rounded-md border bg-white px-3 py-2 text-left text-sm text-[var(--prism-ink)] transition-colors hover:border-[#b9c2d0] hover:bg-[#f7f8fa]">
+                        {ex}</button>
+                    </li>))}
+                </ul>
+              </div>)}
+          </div>
+        ) : (
+          <ol className="space-y-6">{turns.map((t) => <TurnView key={t.id} turn={t} onConfirm={confirmTurn} />)}</ol>
+        )}
+        <div ref={end} />
+      </div>
+      <form className="border-t bg-white p-3" onSubmit={(e) => { e.preventDefault(); void ask(); }}>
+        <div className="rounded-lg border bg-white transition-shadow focus-within:border-[var(--ring)] focus-within:ring-3 focus-within:ring-[var(--ring)]/15">
+          <textarea ref={box} aria-label="Question" className="block w-full resize-none bg-transparent px-3 pt-2.5 text-sm outline-none placeholder:text-[#8a93a3] focus-visible:outline-none"
+            rows={3} maxLength={MAX_QUESTION} value={question} placeholder="Ask about breaks, feeds, positions or prices…"
+            onChange={(e) => setQuestion(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void ask(); } }} />
+          <div className="flex items-center justify-end gap-2 px-2 pb-2">
+            <span className="mr-auto pl-1 text-[11px] text-[#8a93a3]">Shift + Enter for a new line</span>
+            {busy && <Button type="button" size="sm" variant="outline" onClick={stop}><Square className="size-3" aria-hidden />Stop</Button>}
+            <Button type="submit" size="sm" disabled={busy || !question.trim()}><ArrowUp aria-hidden />Ask</Button>
+          </div>
         </div>
       </form>
     </div>

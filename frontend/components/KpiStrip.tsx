@@ -1,7 +1,7 @@
 "use client";
+import { AlertCircle } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useSession } from "@/components/SessionProvider";
 import { api } from "@/lib/api";
@@ -14,24 +14,29 @@ const REFRESH_MS = 60_000;
 export function KpiStripView({ state, onRetry }: { state: KpiState; onRetry: () => void }) {
   if (state.kind === "error") {
     return (
-      <div className="flex items-center gap-3 rounded-md border bg-white px-4 py-3 text-sm">
+      <div className="flex items-center gap-3 rounded-lg border bg-white px-4 py-3 text-sm">
+        <AlertCircle className="size-4 text-[var(--prism-crimson)]" aria-hidden />
         <span>KPIs are unavailable right now.</span>
-        <Button size="sm" variant="outline" onClick={onRetry}>Retry</Button>
+        <Button size="sm" variant="outline" className="ml-auto" onClick={onRetry}>Retry</Button>
       </div>
     );
   }
   const tiles = state.kind === "ok" ? state.tiles : null;
+  const count = tiles?.length || 4;
   return (
-    <section aria-label="Key metrics" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+    <section aria-label="Key metrics"
+      className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border bg-[var(--prism-line)] [&>*:last-child:nth-child(odd)]:col-span-2 lg:[&>*:last-child:nth-child(odd)]:col-span-1 lg:[grid-template-columns:repeat(var(--kpi-cols),minmax(0,1fr))]"
+      style={{ "--kpi-cols": count } as React.CSSProperties}>
       {tiles === null
-        ? [0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-20" />)
+        ? Array.from({ length: count }, (_, i) => (
+          <div key={i} className="space-y-3 bg-white px-5 py-4"><Skeleton className="h-3.5 w-28" /><Skeleton className="h-7 w-20" /></div>))
         : tiles.map((t) => (
-          <Card key={t.metric_id + t.label} className="border-l-4 border-l-[var(--prism-crimson)] px-4 py-3">
-            <div className="text-xs uppercase tracking-wide text-muted-foreground">{t.label}</div>
+          <div key={t.metric_id + t.label} className="bg-white px-5 py-4">
+            <div className="text-sm text-muted-foreground">{t.label}</div>
             {t.status === "ok"
-              ? <div className="text-2xl font-semibold text-[var(--prism-navy)]">{formatValue(t.value, t.unit)}</div>
-              : <div className="text-2xl font-semibold text-muted-foreground">— <span className="text-xs font-normal">Unavailable</span></div>}
-          </Card>
+              ? <div className="mt-1 text-[1.75rem] leading-tight font-semibold tracking-[-0.01em] text-[var(--prism-navy)]">{formatValue(t.value, t.unit)}</div>
+              : <div className="mt-1 text-[1.75rem] leading-tight font-semibold text-[#9aa3b2]">— <span className="text-xs font-normal text-muted-foreground">Unavailable</span></div>}
+          </div>
         ))}
     </section>
   );
