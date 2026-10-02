@@ -65,6 +65,19 @@ def test_combined_root_links_to_present_inputs_only():
     assert g["edges"] == [{"from": RESULT_ID, "to": "metric:open_breaks", "type": "COMBINES"}]
 
 
+def test_combined_with_no_present_input_has_no_result_root():
+    g = build_lineage([], combined_inputs=["metric:open_breaks"])
+    assert g["nodes"] == [] and g["edges"] == []
+    g = build_lineage([{"a": M, "t": None, "b": None}], combined_inputs=["source:feedhub"])
+    assert [x["id"] for x in g["nodes"]] == ["metric:open_breaks"]
+
+
+def test_dimension_inherits_its_metrics_source():
+    g = build_lineage([{"a": M, "t": "HAS_DIMENSION", "b": D}])
+    dim = next(x for x in g["nodes"] if x["kind"] == "Dimension")
+    assert dim["source"] == "cashrecon"
+
+
 # ----------------------------------------------------------------------------------------------- Neo4j-backed
 import pytest  # noqa: E402
 

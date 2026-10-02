@@ -17,7 +17,7 @@ from pydantic import SecretStr
 import uvicorn
 from mcp.types import CallToolResult, TextContent
 
-from prism.agent.prompts import GATEWAY_TOOL_NAMES
+from prism.agent.prompts import GATEWAY_TOOL_NAMES, SUBAGENT_TOOLS, SUPERVISOR_TOOLS
 from prism.config import DEV_SECRET_FIELDS, Settings
 from prism.gateway import server as gateway_server
 from prism.gateway import service as gateway_service
@@ -179,6 +179,7 @@ async def test_tool_list_is_exactly_the_gateway_tools(settings, fake_catalog):
     assert "source" not in tools["run_metric"].input_schema["properties"]  # the catalog decides the source
     assert set(tools["get_rows"].input_schema["properties"]) == {"handle", "offset", "limit"}
     assert set(tools["lineage"].input_schema["properties"]) == {"handle"}
+    assert tools["lineage"].annotations is not None and tools["lineage"].annotations.read_only_hint is True
     for t in tools.values():  # identity never comes from arguments
         assert not {"sub", "user", "user_id", "roles", "scopes", "token"} & set(t.input_schema["properties"])
 
@@ -1232,3 +1233,4 @@ async def test_lineage_passes_metrics_only_and_maps_graph_outages(settings, fake
 
 def test_lineage_is_never_offered_to_the_llm():
     assert "lineage" not in GATEWAY_TOOL_NAMES
+    assert "lineage" not in {t.name for t in SUPERVISOR_TOOLS + SUBAGENT_TOOLS}

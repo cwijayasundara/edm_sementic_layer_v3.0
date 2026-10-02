@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, expect, it } from "vitest";
-import { NODE_SIZE, nodeColor, shortLabel, toGraphOption } from "@/lib/graph";
-import { Lineage } from "@/lib/schemas";
+import { KIND_LABEL, NODE_SIZE, nodeColor, shortLabel, toGraphOption } from "@/lib/graph";
+import { Lineage, type LineageKind } from "@/lib/schemas";
 
 const g = Lineage.parse({
   nodes: [
@@ -25,6 +25,15 @@ describe("toGraphOption", () => {
     expect(s.links).toEqual([{ source: "source:cashrecon", target: "metric:open_breaks", type: "PROVIDES" }]);
   });
 
+  it("legend swatches match the colour of their kind's nodes", () => {
+    const s = (toGraphOption(g) as any).series[0];
+    for (const c of s.categories) {
+      const nodes = s.data.filter((d: any) => KIND_LABEL[d.kind as LineageKind] === c.name);
+      expect(nodes.length).toBeGreaterThan(0);
+      for (const d of nodes) expect(c.itemStyle.color).toBe(d.itemStyle.color);
+    }
+  });
+
   it("labels show a short form and tooltips the full label or the edge type", () => {
     const o = toGraphOption(g) as any;
     const q = o.series[0].data[3];
@@ -39,7 +48,12 @@ describe("node styling", () => {
     expect(nodeColor(g.nodes[0])).toBe("#14213d");
     expect(nodeColor(g.nodes[1])).toBe("#2f8f83");
     expect(nodeColor(g.nodes[2])).not.toBe("#2f8f83");
-    expect(nodeColor(g.nodes[3])).toBe("#d08a1c");
+    expect(nodeColor(g.nodes[3])).toBe("#6b8e23");
+    const sourceHexes = ["#3d6fb6", "#7a5195", "#2f8f83", "#d08a1c", "#c2416b"];
+    const term = nodeColor({ id: "t", kind: "BusinessTerm", label: "t" });
+    expect(sourceHexes).not.toContain(term);
+    expect(sourceHexes).not.toContain(nodeColor(g.nodes[3]));
+    expect(term).toBe("#0f8aa8");
   });
 
   it("shortLabel truncates with an ellipsis", () => {

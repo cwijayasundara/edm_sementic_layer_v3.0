@@ -53,7 +53,7 @@ def build_lineage(rows: list[dict], *, combined_inputs: list[str] | None = None,
                   max_nodes: int = MAX_NODES) -> dict:
     """Rows {a, t, b} (t and b None for a lone node) -> {nodes, edges, truncated}. Nodes of unknown kinds are
     dropped with their edges; past `max_nodes` the lowest-priority kinds go first, and edges to dropped nodes too.
-    `combined_inputs` (a combine result) adds a Result root linked by COMBINES to each input node present."""
+    `combined_inputs` (a combine result) adds a Result root (only when some input is present) linked by COMBINES to each input node present."""
     nodes: dict[str, dict] = {}
     edges: dict[tuple[str, str, str], dict] = {}
     for r in rows:
@@ -63,7 +63,11 @@ def build_lineage(rows: list[dict], *, combined_inputs: list[str] | None = None,
                 nodes.setdefault(x["local_uid"], _node(x))
         if t and _known(a) and _known(b):
             edges[(a["local_uid"], t, b["local_uid"])] = {"from": a["local_uid"], "to": b["local_uid"], "type": t}
-    if combined_inputs is not None:
+    for src, t, dst in edges:
+        if t == "HAS_DIMENSION" and nodes[dst]["kind"] == "Dimension" and "source" not in nodes[dst]:
+            if "source" in nodes[src]:
+                nodes[dst]["source"] = nodes[src]["source"]
+    if combined_inputs is not None and any(i in nodes for i in combined_inputs):
         nodes[RESULT_ID] = {"id": RESULT_ID, "kind": "Result", "label": "Combined result"}
         for target in combined_inputs:
             if target in nodes:

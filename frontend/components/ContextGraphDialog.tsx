@@ -3,7 +3,7 @@ import { Network, RotateCcw } from "lucide-react";
 import dynamic from "next/dynamic";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useSession } from "@/components/SessionProvider";
 import { ApiError, Unauthorized, api } from "@/lib/api";
@@ -12,7 +12,7 @@ import { KIND_LABEL } from "@/lib/graph";
 import { LINEAGE_KINDS, type Lineage } from "@/lib/schemas";
 
 const ContextGraph = dynamic(() => import("@/components/ContextGraph").then((m) => m.ContextGraph),
-  { ssr: false, loading: () => <Skeleton className="h-[560px] w-full" /> });
+  { ssr: false, loading: () => <Skeleton className="h-[min(560px,60vh)] w-full" /> });
 
 export const GRAPH_UNAVAILABLE = "The context graph is unavailable.";
 export const GRAPH_EMPTY = "No context is available for this result.";
@@ -47,10 +47,10 @@ export function ContextGraphDialog({ open, onOpenChange, handle, title }:
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[min(92vw,1400px)]!">
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[min(92vw,1400px)]!">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2"><Network className="size-4" aria-hidden />Context graph</DialogTitle>
-          <p className="text-sm text-muted-foreground">{title}</p>
+          <DialogDescription>{title}</DialogDescription>
         </DialogHeader>
         <Body load={load} layout={layout} selected={selected} onSelect={setSelected}
           onRetry={() => setNonce((n) => n + 1)} onReset={() => { setLayout((n) => n + 1); setSelected(null); }} />
@@ -66,7 +66,7 @@ function Notice({ children }: { children: React.ReactNode }) {
 function Body({ load, layout, selected, onSelect, onRetry, onReset }: {
   load: Load; layout: number; selected: string | null; onSelect: (id: string) => void; onRetry: () => void; onReset: () => void;
 }) {
-  if (load.kind === "loading") return <Skeleton className="h-[560px] w-full" />;
+  if (load.kind === "loading") return <Skeleton className="h-[min(560px,60vh)] w-full" />;
   if (load.kind === "expired") return <Notice>{EXPIRED_TEXT}</Notice>;
   if (load.kind === "error") {
     return <Notice><p>{GRAPH_UNAVAILABLE}</p>
@@ -88,7 +88,7 @@ function Body({ load, layout, selected, onSelect, onRetry, onReset }: {
         <div className="relative rounded-lg border bg-[#fbfcfd]">
           <Button size="sm" variant="outline" className="absolute top-2 left-2 z-10" onClick={onReset}>
             <RotateCcw aria-hidden />Reset layout</Button>
-          <ContextGraph key={layout} lineage={g} onSelect={onSelect} height={560} />
+          <ContextGraph key={layout} lineage={g} onSelect={onSelect} height="min(560px, 60vh)" />
         </div>
         <aside className="rounded-lg border p-3 text-sm" aria-label="Node details">
           {node ? (
@@ -106,7 +106,7 @@ function Body({ load, layout, selected, onSelect, onRetry, onReset }: {
       </div>
       <details className="rounded-lg border px-3 py-2 text-sm">
         <summary className="cursor-pointer font-medium">List view</summary>
-        <div className="mt-2 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="mt-2 grid max-h-48 gap-3 overflow-y-auto sm:grid-cols-2 lg:grid-cols-3">
           {LINEAGE_KINDS.filter((k) => g.nodes.some((n) => n.kind === k)).map((k) => (
             <section key={k}>
               <h4 className="text-xs font-medium text-muted-foreground">{KIND_LABEL[k]}</h4>

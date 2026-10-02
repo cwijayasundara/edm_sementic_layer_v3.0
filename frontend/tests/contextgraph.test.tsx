@@ -30,6 +30,16 @@ describe("ContextGraphDialog", () => {
     expect(screen.getByText("cashrecon")).toBeInTheDocument();
   });
 
+  it("keeps the dialog within the viewport and scrollable", async () => {
+    lineage.mockResolvedValueOnce(G);
+    open();
+    await screen.findByTestId("graph");
+    const content = document.querySelector('[data-slot="dialog-content"]')!;
+    expect(content.className).toContain("max-h-[90vh]");
+    expect(content.className).toContain("overflow-y-auto");
+    expect(screen.getByText("Open breaks by region").closest("[data-slot='dialog-description']")).not.toBeNull();
+  });
+
   it("shows a node's detail and neighbours when it is selected", async () => {
     lineage.mockResolvedValueOnce(G);
     open();

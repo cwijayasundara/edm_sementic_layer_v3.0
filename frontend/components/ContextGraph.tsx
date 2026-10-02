@@ -9,7 +9,7 @@ import type { Lineage } from "@/lib/schemas";
 registerPrismTheme(echarts, getComputedStyle(document.body).fontFamily);
 
 export function ContextGraph({ lineage, onSelect, height }:
-  { lineage: Lineage; onSelect: (id: string) => void; height: number }) {
+  { lineage: Lineage; onSelect: (id: string) => void; height: number | string }) {
   const option = useMemo(() => toGraphOption(lineage), [lineage]);
   const onEvents = useMemo(() => ({
     click: (p: { dataType?: string; data?: { name?: string } }) => {
