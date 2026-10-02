@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const chat = vi.hoisted(() => vi.fn());
 const callImpl = vi.hoisted(() => ({ fn: null as null | ((fn: (t: string) => unknown) => unknown) }));
@@ -11,7 +11,6 @@ vi.mock("@/lib/api", async (orig) => ({ ...(await orig<typeof import("@/lib/api"
 
 import { AssistantPanel, planText } from "@/components/AssistantPanel";
 import { Unauthorized } from "@/lib/api";
-import { beforeEach } from "vitest";
 
 beforeEach(() => { callImpl.fn = null; chat.mockReset(); });
 
@@ -66,9 +65,10 @@ describe("AssistantPanel", () => {
   });
 
   it("allows asking again right after Stop and ignores late widgets of the aborted stream", async () => {
-    chat.mockImplementationOnce(async function* (_t: string, _q: string, signal: AbortSignal) {
+    let release!: () => void;
+    chat.mockImplementationOnce(async function* () {
       yield { type: "plan", tool: "query_source", label: "query cashrecon" };
-      await new Promise<void>((resolve) => signal.addEventListener("abort", () => resolve()));
+      await new Promise<void>((r) => { release = r; });
       yield widget;
     });
     chat.mockImplementationOnce(async function* () {
@@ -86,6 +86,8 @@ describe("AssistantPanel", () => {
     expect(await screen.findByText("Second answer.")).toBeInTheDocument();
     expect(screen.getByText("Stopped")).toBeInTheDocument();
     expect(chat).toHaveBeenCalledTimes(2);
+    release();
+    await new Promise((r) => setTimeout(r, 20));
     expect(onWidget).not.toHaveBeenCalled();
   });
 
