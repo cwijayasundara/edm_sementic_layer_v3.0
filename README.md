@@ -3,17 +3,93 @@
 Ask the data platform a question, get a dashboard back. Design: `docs/superpowers/specs/2026-09-30-agentic-data-intelligence-design.md`.
 
 ## Prerequisites
-Docker Desktop, [uv](https://docs.astral.sh/uv/), openssl. (Node >= 20 once the frontend arrives in a later milestone.)
+- Docker Desktop (Postgres and Neo4j run in containers)
+- [uv](https://docs.astral.sh/uv/) (Python 3.12+ toolchain for the backend)
+- Node.js >= 20 (the UI)
+- openssl (the start script generates local secrets with it)
+- An Anthropic API key, for real answers in the assistant and for `make eval`. Everything else (KPIs, saved
+  dashboards, the live tests) works without one.
 
-## Run the backend
+## Run the app
+
+### 1. First-time setup
 ```bash
-make db                             # Postgres (127.0.0.1:5434) + Neo4j (127.0.0.1:7688) only, in Docker
-make models                         # once: cache the local embedding model in backend/.models (needs network)
-scripts/start_backend.sh            # first run creates .env, starts Postgres (5434) + Neo4j (7688), seeds data, caches the
-                                    # embedding model, loads the context graph if empty/stale, starts every service
-scripts/start_backend.sh --reseed   # regenerate all simulated data
+make models                    # cache the local embedding model in backend/.models (needs network, once)
+scripts/start_backend.sh       # first run creates .env from .env.example and generates its secrets; Ctrl-C to stop
 ```
-Postgres is published on `127.0.0.1` only (host port 5434) and is not reachable from other machines; its dev superuser password must never be exposed beyond localhost.
+Then add your key to `.env` (the file is git-ignored):
+```bash
+ANTHROPIC_API_KEY=sk-ant-...
+```
+Restart the backend after editing `.env`.
+
+### 2. Start the backend (terminal 1)
+```bash
+scripts/start_backend.sh
+```
+This one command:
+- starts Postgres (127.0.0.1:5434) and Neo4j (127.0.0.1:7688) in Docker;
+- seeds the simulated platforms on the first run;
+- loads the context graph if it is empty or stale;
+- runs every service in the foreground (logs in this terminal).
+
+| Service | Address |
+|---|---|
+| RefMaster / MarketMaster mock APIs | http://127.0.0.1:8101/docs, http://127.0.0.1:8102/docs |
+| Source MCP servers | http://127.0.0.1:8201..8205/mcp |
+| Semantic gateway | http://127.0.0.1:8200/mcp |
+| Agent service | http://127.0.0.1:8000/healthz |
+
+Ready when `curl -s localhost:8000/healthz` answers `{"status":"ok","service":"agent"}`.
+
+### 3. Start the UI (terminal 2)
+```bash
+scripts/start_frontend.sh      # or: make frontend. Installs npm dependencies when needed, serves http://localhost:3000
+```
+The UI must be on port 3000: the agent accepts browser requests from `http://localhost:3000` only.
+
+### 4. Use it
+1. Open http://localhost:3000 and sign in as a persona:
+
+   | Persona | Sees |
+   |---|---|
+   | `steward` | RefMaster and MarketMaster |
+   | `cash_ops_emea` | CashRecon and FeedHub, EMEA rows and bank feeds only |
+   | `invest_ops_growth` | AssetRecon, FeedHub and parts of RefMaster, Growth funds and custodian feeds only |
+   | `bi_analyst` | every source, metrics only |
+   | `head_data` | everything |
+
+2. The KPI strip shows that persona's tiles.
+3. Ask a question in the assistant, for example "Which legal entity has the most USD breaks open longer than 5 days?"
+   Widgets stream onto the canvas. "view query · source rows" shows how each was produced.
+4. Press **Correct? Confirm** on an answer you trust. Only confirmed answers feed the query history (`make distill`).
+5. Pin widgets, then **Save pinned** to keep them. **Dashboards** re-runs a saved dashboard with your current access
+   (no model call).
+
+### 5. Stop everything
+- Press Ctrl-C in both terminals.
+- Then run `docker compose stop` to stop Postgres and Neo4j. The data is kept; `docker compose down -v` deletes it.
+
+### Reset or refresh data
+```bash
+scripts/start_backend.sh --reseed  # regenerate all simulated data (the app database and its history are kept)
+make reseed && make graph          # the same, without starting the services
+make distill                       # turn confirmed answers into query history; re-run after every `make graph`
+```
+A one-person demo needs `PRISM_HISTORY_MIN_CALLERS=1` in `.env` for confirmed answers to be distilled (the default
+needs two distinct callers per question).
+
+### Troubleshooting
+- **The assistant says "The assistant is not reachable", or `/chat` answers 503:** `ANTHROPIC_API_KEY` is missing from `.env`.
+  Restart the backend after adding it.
+- **"This result has expired":** the gateway restarted, so its result handles are gone. Ask again or reopen the
+  dashboard.
+- **Port 3000 or 8000 is busy:** another app holds it. Stop that app. The UI port cannot change, because the agent's
+  CORS allows only http://localhost:3000.
+- **Gateway startup asks for `make models` or `make graph`:** run the named command, then start again.
+
+Postgres is published on `127.0.0.1` only and is not reachable from other machines. Its dev superuser password must
+never be exposed beyond localhost.
 
 ## Try the APIs
 ```bash
@@ -174,12 +250,7 @@ curl -sN -XPOST localhost:8000/chat -H "Authorization: Bearer $T" -H 'content-ty
   persona. Live runs write smoke rows into the real app database (`app.audit_log`, `app.agent_runs`, `app.query_log`).
 
 ## UI (M5)
-
-1. Start the backend: `scripts/start_backend.sh` (turns `/dev/token` on for the local demo).
-2. Start the UI: `make frontend` (or `scripts/start_frontend.sh`), then open http://localhost:3000.
-3. Pick a persona. The KPI strip, chips and every answer are scoped to that persona.
-4. Ask a question in the assistant (needs `ANTHROPIC_API_KEY` for `/chat`). Pin widgets, then "Save pinned" to keep
-   them; "Dashboards" re-runs a saved dashboard with your current access (no model call).
+How to start and use it: see "Run the app" above.
 
 Tests: `make test-ui` (lint, types, vitest) and `make e2e` (Playwright against a mocked agent;
 `PRISM_E2E_LIVE=1 make e2e` checks login and KPIs against the running stack).
@@ -187,7 +258,8 @@ Tests: `make test-ui` (lint, types, vitest) and `make e2e` (Playwright against a
 ## Evals
 ```bash
 make eval-check   # no model calls: references replay, planted stories hold, canaries are readable/hidden as claimed
-make eval         # live: 30 golden + 15 red-team questions through the agent and the real model (costs money)
+make eval         # live: 30 golden + 15 red-team questions through the agent and the real model (costs money;
+                  #   needs the backend running and ANTHROPIC_API_KEY in .env; capped by --max-cost-usd, default $5)
 cd backend && uv run python -m prism.evals.cli --case aged_usd_breaks_by_entity_head --max-cost-usd 0.5
 ```
 Each case runs under its own `eval-<id>` identity. Golden answers are graded without an LLM judge:
