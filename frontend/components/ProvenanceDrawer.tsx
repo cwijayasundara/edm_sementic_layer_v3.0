@@ -43,36 +43,31 @@ export function RecipeBlock({ view }: { view: RecipeView }) {
   }
 }
 
-export function ProvenanceDrawer({ item, onClose }: { item: CanvasItem | null; onClose: () => void }) {
+function ProvenanceBody({ item }: { item: CanvasItem }) {
   const { call } = useSession();
+  const handle = item.widget.handle;
+  const status = item.status;
   const callRef = useRef(call);
   callRef.current = call;
   const [offset, setOffset] = useState(0);
   const [page, setPage] = useState<ResultPage | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
 
-  useEffect(() => { setOffset(0); }, [item?.key]);
   useEffect(() => {
-    if (!item || item.status !== "ok") return;
+    if (status !== "ok") return;
     let cancelled = false;
     setFailed(null);
-    callRef.current((t) => api.results(t, item.widget.handle, offset, PAGE_SIZE))
+    callRef.current((t) => api.results(t, handle, offset, PAGE_SIZE))
       .then((p) => { if (!cancelled) setPage(p); })
       .catch((e) => { if (!cancelled) setFailed(e instanceof ApiError && e.status === 404
         ? "This result has expired. Ask again or reopen the dashboard." : "Data service unavailable"); });
     return () => { cancelled = true; };
-  }, [item, offset]);
+  }, [handle, status, offset]);
 
-  const info = item?.info;
+  const info = item.info;
   const total = page?.row_count ?? info?.row_count ?? 0;
+  if (!info) return null;
   return (
-    <Sheet open={item !== null} onOpenChange={(open) => { if (!open) onClose(); }}>
-      <SheetContent className="w-full overflow-y-auto sm:max-w-2xl">
-        <SheetHeader>
-          <SheetTitle>{item?.widget.title}</SheetTitle>
-          <SheetDescription>How this result was produced, and its source rows.</SheetDescription>
-        </SheetHeader>
-        {info && (
           <div className="space-y-4 p-4">
             <dl className="grid grid-cols-[8rem_1fr] gap-1 text-sm">
               <dt className="text-muted-foreground">Source</dt><dd>{info.source ?? "combined"}</dd>
@@ -96,7 +91,18 @@ export function ProvenanceDrawer({ item, onClose }: { item: CanvasItem | null; o
               </>
             )}
           </div>
-        )}
+  );
+}
+
+export function ProvenanceDrawer({ item, onClose }: { item: CanvasItem | null; onClose: () => void }) {
+  return (
+    <Sheet open={item !== null} onOpenChange={(open) => { if (!open) onClose(); }}>
+      <SheetContent className="w-full overflow-y-auto sm:max-w-2xl">
+        <SheetHeader>
+          <SheetTitle>{item?.widget.title}</SheetTitle>
+          <SheetDescription>How this result was produced, and its source rows.</SheetDescription>
+        </SheetHeader>
+        {item && <ProvenanceBody key={item.key} item={item} />}
       </SheetContent>
     </Sheet>
   );

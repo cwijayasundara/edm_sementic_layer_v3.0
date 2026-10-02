@@ -36,3 +36,21 @@ describe("ProvenanceDrawer", () => {
     expect(await screen.findByText("Query details are not available for this result.")).toBeInTheDocument();
   });
 });
+
+describe("ProvenanceDrawer item switch", () => {
+  it("drops the previous item's rows and fetches the new item from offset 0", async () => {
+    results.mockReset();
+    results.mockImplementation(async (_t: string, h: string, offset: number) => ({ handle: h,
+      columns: ["region", "value"], offset, row_count: 120, rows: [[`${h}-${offset}`, 1]] }));
+    const b: CanvasItem = { ...item, key: "t2:w2", widget: { ...item.widget, id: "w2", title: "Other", handle: "r_bbbbbbbbbbbb" } };
+    const { rerender } = render(<ProvenanceDrawer item={item} onClose={vi.fn()} />);
+    expect(await screen.findByText("r_aaaaaaaaaaaa-0")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Next" }));
+    expect(await screen.findByText("r_aaaaaaaaaaaa-50")).toBeInTheDocument();
+    rerender(<ProvenanceDrawer item={b} onClose={vi.fn()} />);
+    expect(screen.queryByText("r_aaaaaaaaaaaa-50")).not.toBeInTheDocument();
+    expect(await screen.findByText("r_bbbbbbbbbbbb-0")).toBeInTheDocument();
+    expect(results).not.toHaveBeenCalledWith("T", "r_bbbbbbbbbbbb", 50, 50);
+    expect(results).toHaveBeenLastCalledWith("T", "r_bbbbbbbbbbbb", 0, 50);
+  });
+});
