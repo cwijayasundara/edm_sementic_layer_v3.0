@@ -211,3 +211,17 @@ async def test_per_tool_cap_overrides_the_default():
 def test_default_max_tokens_is_16000():
     from prism.agent.types import ModelRequest
     assert ModelRequest("m", "s", "d", (), ()).max_tokens == 16000
+
+
+async def test_observe_receives_text_written_before_tool_calls():
+    seen = []
+
+    async def handler(name, args):
+        return ToolOutcome("r")
+
+    first = reply_tools(("echo", {"i": 1}), ("echo", {"i": 2}))
+    first = ModelResponse((TextBlock("I will look up the metric."), *first.content), first.stop_reason, first.usage)
+    client = ScriptedModelClient([first, reply_text("final")])
+    res = await runner(client, handler, observe=seen.append).run("question")
+    assert res.text == "final"
+    assert seen == ["I will look up the metric."]

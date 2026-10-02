@@ -49,6 +49,19 @@ class RunState:
     delegated: bool = False
     spec_is_fallback: bool = False   # spec built by the harness, so its narrative is a truncated stand-in
     events: asyncio.Queue = field(default_factory=asyncio.Queue)   # dict events; None ends the stream
+    steps: list[dict] = field(default_factory=list)   # the decision trace, sent with record_trace
+    pending_note: str | None = None   # text the model wrote before its latest tool calls; the next step takes it
+
+    def add_step(self, **fields) -> int:
+        seq = len(self.steps)
+        step = {"seq": seq, "parent": None, "kind": "error", "label": "", "note": None, "considered": [],
+                "ms": None, "status": "ok", "error_code": None, "tool": None, "args": None, "handle": None}
+        step.update(fields)
+        if self.pending_note and step.get("note") is None:
+            step["note"] = self.pending_note[:500]
+        self.pending_note = None
+        self.steps.append(step)
+        return seq
 
     def emit(self, type: str, **data) -> None:
         self.events.put_nowait({"type": type, **data})

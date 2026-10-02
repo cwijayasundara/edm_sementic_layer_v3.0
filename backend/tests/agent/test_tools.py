@@ -314,3 +314,44 @@ async def test_combine_recipe_nests_its_inputs_and_is_none_when_an_input_is_unkn
         "tool": "combine", "args": {"sql": "SELECT * FROM a", "inputs": {"a": state.handles["r_111111111111"].recipe}}}
     await tb.supervisor_handler("combine", {"sql": "SELECT * FROM b", "handles": {"b": "r_999999999999"}})
     assert state.handles["r_333333333333"].recipe is None
+
+
+def test_add_step_numbers_steps_and_consumes_the_pending_note():
+    state = RunState(run_id="r", sub="head_data", question="q", meter=UsageMeter())
+    state.pending_note = "Checking the catalog first."
+    assert state.add_step(kind="context", label="Searched the context graph", tool="search_context") == 0
+    assert state.add_step(kind="metric", label="Ran metric x", tool="run_metric") == 1
+    assert state.steps[0]["note"] == "Checking the catalog first." and state.steps[1]["note"] is None
+
+
+async def test_toolbox_records_a_step_per_gateway_call_with_handle_and_timing():
+    gw = FakeGateway({"search_context": {"metrics": [{"id": "open_breaks"}]},
+                      "run_metric": summary(metric_id="open_breaks")})
+    tb, state = box(gw)
+    await tb.supervisor_handler("search_context", {"question": "q"})
+    await tb.supervisor_handler("run_metric", {"metric_id": "open_breaks", "dimensions": ["region"]})
+    kinds = [(s["kind"], s["tool"]) for s in state.steps]
+    assert kinds == [("context", "search_context"), ("metric", "run_metric")]
+    assert state.steps[0]["considered"] == ["open_breaks"]
+    assert state.steps[1]["handle"] == "r_aaaaaaaaaaaa" and state.steps[1]["status"] == "ok"
+    assert state.steps[1]["label"] == "Ran metric open_breaks by region"
+    assert state.steps[1]["ms"] >= 0
+    json.dumps(state.steps)
+
+
+async def test_toolbox_records_a_failed_call_as_an_error_step():
+    gw = FakeGateway({"run_metric": GatewayError("not_permitted", "no")})
+    tb, state = box(gw)
+    await tb.supervisor_handler("run_metric", {"metric_id": "x"})
+    assert state.steps[-1]["status"] == "error" and state.steps[-1]["error_code"] == "not_permitted"
+
+
+async def test_delegate_nests_subagent_steps_under_the_delegate_step():
+    gw = FakeGateway({"run_metric": summary(handle="r_bbbbbbbbbbbb", metric_id="open_breaks")})
+    client = ScriptedModelClient([reply_tools(("run_metric", {"metric_id": "open_breaks"})), reply_text("got it")])
+    tb, state = box(gw, client)
+    await tb.supervisor_handler("delegate", {"source": "cashrecon", "sub_question": "open breaks?"})
+    delegate = next(s for s in state.steps if s["kind"] == "delegate")
+    children = [s for s in state.steps if s["parent"] == delegate["seq"]]
+    assert children and all(s["tool"] in ("search_context", "run_metric", "query_source") for s in children)
+    assert delegate["ms"] is not None

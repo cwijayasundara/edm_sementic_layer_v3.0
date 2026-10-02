@@ -114,7 +114,8 @@ class AgentService:
                 runner = MessagesRunner(self._client, model=model, stable_system=SUPERVISOR_SYSTEM,
                                         dynamic_system=dynamic_context(user, self._clock(), self._settings.as_of),
                                         tools=SUPERVISOR_TOOLS, handler=toolbox.supervisor_handler, limits=limits,
-                                        meter=state.meter)
+                                        meter=state.meter,
+                                        observe=lambda text: setattr(state, "pending_note", text))
                 try:
                     return (await runner.run(question)).text, None
                 except RunLimitExceeded as exc:

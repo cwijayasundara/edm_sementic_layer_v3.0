@@ -64,7 +64,9 @@ class MessagesRunner:
     def __init__(self, client: ModelClient, *, model: str, stable_system: str, dynamic_system: str,
                  tools: tuple[ToolDef, ...], handler: ToolHandler, limits: RunLimits, meter: UsageMeter,
                  max_tokens: int = 16000, force_tool: str | None = None,
-                 sleep: Callable[[float], Awaitable[None]] = asyncio.sleep):
+                 sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+                 observe: Callable[[str], None] | None = None):
+        self._observe = observe
         self._client, self._model = client, model
         self._stable, self._dynamic = stable_system, dynamic_system
         self._tools, self._handler, self._limits, self._meter = tools, handler, limits, meter
@@ -86,6 +88,10 @@ class MessagesRunner:
             response = await self._create(messages, first=(turn == 0))
             messages.append(Message("assistant", response.content))
             uses = [b for b in response.content if isinstance(b, ToolUse)]
+            if uses and self._observe is not None:
+                note = "".join(b.text for b in response.content if isinstance(b, TextBlock)).strip()
+                if note:
+                    self._observe(note)
             if not uses:
                 # end_turn, stop_sequence and pause_turn (no server tools are configured) all end the run as-is
                 if response.stop_reason == "max_tokens":
