@@ -113,7 +113,7 @@ backend/prism/evals/
   cases.py     pydantic models for both case files; loads and validates the YAML
   golden.yaml  ~30 cases
   redteam.yaml ~15 cases
-  client.py    agent HTTP client: /dev/token, POST /chat SSE parsing, /results paging
+  client.py    agent HTTP client: per-case tokens, POST /chat SSE parsing, /results paging
   grade.py     golden checks (routing, rows, story, chart)
   leaks.py     red-team detectors (canary/value text, out-of-scope rows, forbidden tools in app.audit)
   report.py    report.json + report.md
