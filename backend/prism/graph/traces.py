@@ -28,7 +28,7 @@ class TraceOwned(Exception):
 OWNER_CYPHER = "MATCH (t:Trace {ns: $ns, run_id: $run_id}) RETURN t.sub AS sub"
 
 PURGE_CYPHER = """
-MATCH (t:Trace {ns: $ns, sub: $sub}) WHERE t.expires_at < $now OR t.run_id = $run_id
+MATCH (t:Trace {ns: $ns}) WHERE t.expires_at < $now OR (t.sub = $sub AND t.run_id = $run_id)
 OPTIONAL MATCH (t)-[:HAS_STEP]->(step:TraceStep)
 OPTIONAL MATCH (step)-[:CALLED]->(call:ToolCall)
 DETACH DELETE t, step, call

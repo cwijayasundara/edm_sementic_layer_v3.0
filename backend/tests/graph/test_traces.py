@@ -127,13 +127,14 @@ def test_expired_traces_of_the_caller_are_deleted_on_write(db):
 
 
 @pytest.mark.neo4j
-def test_purge_touches_only_the_callers_expired_or_replaced_traces(db):
+def test_purge_deletes_any_expired_trace_but_never_anothers_live_one(db):
     put(db, trace(run_id="d" * 32, sub="head_data"), who="head_data", now=NOW - 8 * DAY)   # someone else's, expired
+    put(db, trace(run_id="a" * 32, sub="head_data"), who="head_data")                       # someone else's, live
     put(db, trace(run_id="e" * 32))                                                          # mine, unexpired
     put(db, trace(run_id="f" * 32), now=NOW - 8 * DAY)                                       # mine, expired
     put(db, trace(run_id="c" * 32))                                                          # the write that purges
     ids = db.execute_query("MATCH (t:Trace {ns: $ns}) RETURN collect(t.run_id) AS ids", ns=TEST_GRAPH_NS)
-    assert sorted(ids.records[0]["ids"]) == sorted(["d" * 32, "e" * 32, "c" * 32])
+    assert sorted(ids.records[0]["ids"]) == sorted(["a" * 32, "e" * 32, "c" * 32])
 
 
 @pytest.mark.neo4j

@@ -338,7 +338,7 @@ async def test_a_recorded_answer_emits_an_answer_event_before_telemetry():
                       "record_answer": {"recorded": True, "record_id": RID, "metric_backed": True}})
     events, rec = await _answer(gw, VIZ)
     assert [e["type"] for e in events] == ["plan", "widget", "summary", "answer", "telemetry"]
-    assert events[3] == {"type": "answer", "record_id": RID, "confirmable": True}
+    assert events[3] == {"type": "answer", "record_id": RID, "confirmable": True, "run_id": events[-1]["run_id"]}
     assert "verified" not in rec[0][1]
 
 
@@ -346,7 +346,7 @@ async def test_a_not_metric_backed_record_is_not_confirmable():
     gw = FakeGateway({"run_metric": summary(metric_id="m"),
                       "record_answer": {"recorded": True, "record_id": RID, "metric_backed": False}})
     events, _ = await _answer(gw, VIZ)
-    assert events[3] == {"type": "answer", "record_id": RID, "confirmable": False}
+    assert events[3] == {"type": "answer", "record_id": RID, "confirmable": False, "run_id": events[-1]["run_id"]}
 
 
 @pytest.mark.parametrize("result", [{"recorded": True}, {"recorded": True, "record_id": "nope", "metric_backed": True},
@@ -425,6 +425,26 @@ async def test_more_than_forty_steps_send_the_first_39_and_the_outcome_step():
     await service(gw, ScriptedModelClient([]))._record_trace(gw, state, "ok", "done")
     steps = dict(gw.calls)["record_trace"]["steps"]
     assert len(steps) == 40 and steps[38]["label"] == "t38" and steps[-1]["kind"] == "answer"
+
+
+async def test_oversized_args_are_truncated_so_the_trace_is_recorded():
+    import json
+
+    from prism.agent.state import RunState, UsageMeter
+    gw = FakeGateway({"record_trace": {"recorded": True}})
+    state = RunState(run_id="a" * 32, sub="s", question="q", meter=UsageMeter())
+    state.add_step(kind="combine", label="L" * 500, note="n" * 900, tool="combine",
+                   args={"sql": "select " + "x" * 20000, "inputs": []})
+    for i in range(30):
+        state.add_step(kind="query", label=f"q{i}", tool="query_source", args={"request": {"sql": "y" * 5000}})
+    await service(gw, ScriptedModelClient([]))._record_trace(gw, state, "ok", "done")
+    sent = dict(gw.calls)["record_trace"]
+    assert len(sent["steps"]) == 32
+    assert len(json.dumps(sent).encode()) < 60_000
+    kept = [st["args"] for st in sent["steps"] if st["args"]]
+    assert kept and all(len(a) <= 2000 for a in kept) and len(kept) < 31   # some args dropped to fit
+    assert len(sent["steps"][0]["label"]) == 200 and len(sent["steps"][0]["note"]) == 500
+    assert len(state.steps[0]["args"]["sql"]) > 20000   # the run's own steps are untouched
 
 
 async def test_retry_clears_pending_note_but_keeps_steps():

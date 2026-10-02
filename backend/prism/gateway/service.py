@@ -264,6 +264,8 @@ class Gateway:
                                        queue=COMBINE_QUEUE)
         self.record_limiter = Limiter("record_answer", total=RECORD_CONCURRENCY, per_sub=RECORD_PER_SUB,
                                       queue=RECORD_QUEUE, rate_per_min=RECORD_RATE_PER_MIN, burst=RECORD_BURST)
+        self.trace_limiter = Limiter("record_trace", total=RECORD_CONCURRENCY, per_sub=RECORD_PER_SUB,
+                                     queue=RECORD_QUEUE, rate_per_min=RECORD_RATE_PER_MIN, burst=RECORD_BURST)
         self.confirm_limiter = Limiter("confirm_answer", total=RECORD_CONCURRENCY, per_sub=RECORD_PER_SUB,
                                        queue=RECORD_QUEUE, rate_per_min=RECORD_RATE_PER_MIN, burst=RECORD_BURST)
 
@@ -485,7 +487,7 @@ class Gateway:
                  "answer": args.answer[:TRACE_TEXT["answer"]], "path": args.path, "status": args.status,
                  "answered": answered, "steps": steps}
         safe = {**claims, "metrics_only": is_metrics_only(claims)}
-        release = await self.record_limiter.acquire(sub)
+        release = await self.trace_limiter.acquire(sub)
         try:
             n = await store.record(trace, safe)
         except TraceOwned:
@@ -517,7 +519,7 @@ class Gateway:
     async def _mark_trace_confirmed(self, claims: dict, args: RunIdArgs, rec: CallRecord) -> dict:
         sub = claims["sub"]
         store = self._require_traces()
-        release = await self.confirm_limiter.acquire(sub)
+        release = await self.trace_limiter.acquire(sub)
         try:
             ok = await store.confirm(args.run_id, sub)
         except (TimeoutError, GraphUnavailable, GraphError):

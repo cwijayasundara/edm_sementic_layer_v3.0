@@ -1387,3 +1387,15 @@ async def test_trace_store_always_gets_fail_closed_metrics_only(settings, fake_c
                 body(await c.call_tool("get_trace", {"run_id": RUN}))
             assert traces.saved[RUN][1]["metrics_only"] is True
             assert [cl["metrics_only"] for cl in traces.get_claims] == [True]
+
+
+async def test_trace_writes_do_not_spend_the_record_answer_budget(settings, fake_catalog):
+    gw = make_gateway(settings, fake_catalog, traces=FakeTraces())
+    async with gateway_client(settings, gw, "cash_ops_emea") as c:
+        h = body(await c.call_tool("run_metric", {"metric_id": "open_breaks", "dimensions": ["region"]}))["handle"]
+        for i in range(10):   # a burst of runs, each record_answer + record_trace
+            ans = await c.call_tool("record_answer", {"question": "q", "plan": "p", "handles": [h]})
+            assert not ans.is_error, i
+            tr = await c.call_tool("record_trace", {"run_id": f"{i:032x}", "question": "q", "answer": "a", "path": "p",
+                                                    "status": "ok", "steps": [STEP]})
+            assert not tr.is_error, i

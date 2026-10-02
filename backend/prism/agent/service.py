@@ -2,6 +2,7 @@
 ... -> error -> telemetry). Owns the supervisor run, the one-step model escalation, the dashboard fallback, the
 record_answer write-back and the per-run telemetry."""
 import asyncio
+import json
 import logging
 import re
 import uuid
@@ -27,6 +28,10 @@ RECORDED_HANDLES = 20
 NO_ANSWER = "I could not produce an answer for that question."
 RUN_ID = re.compile(r"^[0-9a-f]{32}$")
 MAX_TRACE_STEPS = 40
+TRACE_ARGS_CHARS = 2000      # the gateway's own per-step args cap
+TRACE_NOTE_CHARS = 500
+TRACE_LABEL_CHARS = 200
+TRACE_PAYLOAD_BYTES = 60_000   # under the gateway's 64 KB whole-arguments check
 TRACE_WRITE_TIMEOUT_S = 3.0
 RECORD_ID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 
@@ -103,7 +108,7 @@ class AgentService:
             yield event
         recorded = await self._record_answer(gateway, question, state)
         if recorded is not None:
-            yield {"type": "answer", **recorded}
+            yield {"type": "answer", **recorded, "run_id": state.run_id}   # lets Confirm mark the trace early
         summary_text = next((e["text"] for e in reversed(events) if e["type"] == "summary"), "")
         await self._record_trace(gateway, state, run.status, summary_text)   # after the answer event, before telemetry
 
@@ -163,11 +168,35 @@ class AgentService:
         try:
             await asyncio.wait_for(gateway.call("record_trace", {
                 "run_id": state.run_id, "question": state.question, "answer": (text or "")[:2000],
-                "path": self._path(state), "status": status, "steps": steps}), TRACE_WRITE_TIMEOUT_S)
+                "path": self._path(state), "status": status, "steps": self._bounded_steps(steps)}),
+                TRACE_WRITE_TIMEOUT_S)
         except TimeoutError:
             log.warning("trace_write_failed: timeout")
         except Exception as exc:  # noqa: BLE001 - the trace is a side record
             log.warning("trace_write_failed: %s", getattr(exc, "code", type(exc).__name__))
+
+    @staticmethod
+    def _bounded_steps(steps: list[dict]) -> list[dict]:
+        """Truncate rather than get the whole trace refused by the gateway's 64 KB check: each step's args become their
+        JSON text capped at TRACE_ARGS_CHARS (sent as a string), note/label are capped, and while the payload is still
+        over TRACE_PAYLOAD_BYTES the args of the longest steps are dropped first. Steps are never dropped."""
+        out = []
+        for st in steps:
+            st = dict(st)
+            if st.get("args") is not None:
+                text = json.dumps(st["args"], separators=(",", ":"), default=str, ensure_ascii=False)
+                st["args"] = text[:TRACE_ARGS_CHARS]
+            if st.get("note"):
+                st["note"] = st["note"][:TRACE_NOTE_CHARS]
+            st["label"] = (st.get("label") or "")[:TRACE_LABEL_CHARS]
+            out.append(st)
+        size = len(json.dumps(out, default=str, ensure_ascii=False).encode())
+        for st in sorted((x for x in out if x.get("args")), key=lambda x: len(x["args"]), reverse=True):
+            if size <= TRACE_PAYLOAD_BYTES:
+                break
+            size -= len(json.dumps(st["args"], ensure_ascii=False).encode())
+            st["args"] = None
+        return out
 
     @staticmethod
     def _answer_events(state: RunState, text: str) -> list[dict]:
