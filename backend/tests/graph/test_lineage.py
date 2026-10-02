@@ -63,3 +63,81 @@ def test_combined_root_links_to_present_inputs_only():
                       combined_inputs=["metric:open_breaks", "source:feedhub"])
     assert g["nodes"][0] == {"id": RESULT_ID, "kind": "Result", "label": "Combined result"}
     assert g["edges"] == [{"from": RESULT_ID, "to": "metric:open_breaks", "type": "COMBINES"}]
+
+
+# ----------------------------------------------------------------------------------------------- Neo4j-backed
+import pytest  # noqa: E402
+
+from prism.graph.lineage import lineage  # noqa: E402
+from prism.graph.model import build_graph, visible  # noqa: E402
+from prism.security.personas import PERSONAS, claims_for  # noqa: E402
+from tests.graph_ns import TEST_GRAPH_NS  # noqa: E402
+
+
+@pytest.fixture(scope="module")
+def graph(graph_embedder):
+    return build_graph(graph_embedder)
+
+
+@pytest.fixture(scope="module")
+def run(neo4j_driver, context_graph):
+    def _run(who, plans, sources=(), **kw):
+        claims = claims_for(who) if isinstance(who, str) else who
+        return lineage(neo4j_driver, plans, sources, claims, ns=TEST_GRAPH_NS, **kw)
+    return _run
+
+
+@pytest.mark.neo4j
+def test_lineage_of_a_metric_reaches_source_table_and_dimension_columns(run):
+    g = run("steward", {"price_conflicts": ["vendor_id"]})
+    kinds = {x["kind"] for x in g["nodes"]}
+    assert {"Metric", "Source", "Dimension", "Table"} <= kinds
+    ids = {x["id"] for x in g["nodes"]}
+    assert "metric:price_conflicts" in ids and "source:marketmaster" in ids
+    assert {"from": "source:marketmaster", "to": "metric:price_conflicts", "type": "PROVIDES"} in g["edges"]
+    dims = [x for x in g["nodes"] if x["kind"] == "Dimension"]
+    assert [d["label"] for d in dims] == ["vendor_id"]          # only the dimensions the result used
+    assert all(not x["id"].startswith("prism_test:") for x in g["nodes"])   # local_uid, never uid
+
+
+@pytest.mark.neo4j
+@pytest.mark.parametrize("persona", sorted(PERSONAS))
+def test_every_lineage_node_is_visible_to_the_caller(run, graph, persona):
+    """The Python twin of gate() agrees: nothing in a lineage graph is hidden from that caller elsewhere."""
+    claims = claims_for(persona)
+    for metric in ("price_conflicts", "open_breaks", "manual_matches", "open_position_exceptions"):
+        dims = sorted(graph.nodes[f"metric:{metric}"]["props"].get("dimensions") or [])
+        g = run(claims, {metric: dims})
+        leaked = [x["id"] for x in g["nodes"] if x["id"] not in graph.nodes or not visible(graph, claims, x["id"])]
+        assert leaked == [], (persona, metric, leaked)
+
+
+@pytest.mark.neo4j
+def test_lineage_metrics_only_hides_schema_and_sensitive_dimensions(run):
+    g = run("bi_analyst", {"manual_matches": ["matched_by", "region"]})
+    kinds = {x["kind"] for x in g["nodes"]}
+    assert not kinds & {"Table", "Column", "Field", "Endpoint"}
+    assert "matched_by" not in {x["label"] for x in g["nodes"]}
+    assert "metric:manual_matches" in {x["id"] for x in g["nodes"]}
+    head = run("head_data", {"manual_matches": ["matched_by"]})
+    assert "matched_by" in {x["label"] for x in head["nodes"]}   # the control: it exists
+
+
+@pytest.mark.neo4j
+def test_lineage_of_a_foreign_metric_is_empty(run):
+    assert run("cash_ops_emea", {"price_conflicts": ["vendor_id"]})["nodes"] == []
+
+
+@pytest.mark.neo4j
+def test_free_form_source_yields_only_its_visible_source(run):
+    g = run("head_data", {}, ["cashrecon"])
+    assert g["nodes"] == [{"id": "source:cashrecon", "kind": "Source", "label": "cashrecon"}]
+    assert run("steward", {}, ["cashrecon"])["nodes"] == []
+
+
+@pytest.mark.neo4j
+def test_questions_are_capped_and_link_to_their_metric(run):
+    g = run("steward", {"price_conflicts": []})
+    qs = [x for x in g["nodes"] if x["kind"] == "Question"]
+    assert 1 <= len(qs) <= 3
+    assert all({"from": q["id"], "to": "metric:price_conflicts", "type": "ASKED_ABOUT"} in g["edges"] for q in qs)
