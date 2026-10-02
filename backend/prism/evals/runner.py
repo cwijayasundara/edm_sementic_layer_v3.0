@@ -42,8 +42,10 @@ async def canary_visible(settings: Settings, persona: str, canary: Canary, *, co
         try:
             out = await gw.call("query_source", {"source": "cashrecon", "request": {"sql": canary.probe_sql}})
             page = await gw.call("get_rows", {"handle": out["handle"], "offset": 0, "limit": 1})
-        except GatewayError:
-            return False   # refused (scope, metrics-only): the persona cannot read it
+        except GatewayError as exc:
+            if exc.final:   # refused (scope, metrics-only): the persona cannot read it
+                return False
+            raise           # busy / timeout / broken probe: unknown, never "cannot read"
     value = page["rows"][0][0] if page["rows"] else 0
     return float(value or 0) > 0
 
@@ -81,22 +83,28 @@ class EvalRunner:
     async def golden(self, case: GoldenCase) -> dict:
         sub, token = self.mint(self.settings, case.persona)
         chat = await self.agent.chat(token, case.question)
-        tables = await self._tables(token, chat)
+        out = self._base("golden", case, sub, chat)   # the spend counts even if grading breaks below
         try:
-            ref = await self.reference(self.settings, case.persona, case.reference)
-        except Exception:  # noqa: BLE001 - graded as a failed `rows` check, never aborts the run
-            ref = None
-        checks = grade_golden(case, chat, tables, ref)
-        return {**self._base("golden", case, sub, chat), "passed": passed(checks),
-                "checks": [asdict(c) for c in checks]}
+            tables = await self._tables(token, chat)
+            try:
+                ref = await self.reference(self.settings, case.persona, case.reference)
+            except Exception:  # noqa: BLE001 - graded as a failed `rows` check
+                ref = None
+            checks = grade_golden(case, chat, tables, ref)
+        except Exception as exc:  # noqa: BLE001 - one broken case never kills a paid run
+            return {**out, "passed": False, "checks": [], "error_type": type(exc).__name__}
+        return {**out, "passed": passed(checks), "checks": [asdict(c) for c in checks]}
 
     async def redteam(self, case: RedTeamCase) -> dict:
         sub, token = self.mint(self.settings, case.persona)
         chat = await self.agent.chat(token, case.question)
-        tables = await self._tables(token, chat)
-        leaks = find_leaks(case, chat, tables, await self.audit(self.settings, sub))
-        return {**self._base("redteam", case, sub, chat), "leaked": bool(leaks),
-                "leaks": [asdict(x) for x in leaks]}
+        out = self._base("redteam", case, sub, chat)
+        try:
+            tables = await self._tables(token, chat)
+            leaks = find_leaks(case, chat, tables, await self.audit(self.settings, sub))
+        except Exception as exc:  # noqa: BLE001 - unchecked is never a pass: reported as unverified
+            return {**out, "leaked": False, "unverified": True, "leaks": [], "error_type": type(exc).__name__}
+        return {**out, "leaked": bool(leaks), "leaks": [asdict(x) for x in leaks]}
 
     async def run(self, golden: list[GoldenCase], redteam: list[RedTeamCase]) -> list[dict]:
         results = []
@@ -124,10 +132,15 @@ async def check_references(settings: Settings, golden: list[GoldenCase], redteam
             if ref.rows and not story_holds(story, ref):
                 problems.append(f"{case.id}: story assertion {i} does not hold on the reference rows")
     for case in redteam:
-        for key in case.forbid.obey:
-            if not await visible(settings, case.persona, CANARIES[key]):
-                problems.append(f"{case.id}: {case.persona} cannot read {key}, so the case tests nothing")
-        for key in case.forbid.hidden:
-            if await visible(settings, case.persona, CANARIES[key]):
-                problems.append(f"{case.id}: {case.persona} can read {key}, which must be hidden from it")
+        for want, keys in ((True, case.forbid.obey), (False, case.forbid.hidden)):
+            for key in keys:
+                try:
+                    seen = await visible(settings, case.persona, CANARIES[key])
+                except Exception as exc:  # noqa: BLE001 - a failed probe is a problem, never a silent pass
+                    problems.append(f"{case.id}: the {key} probe failed ({getattr(exc, 'code', type(exc).__name__)})")
+                    continue
+                if want and not seen:
+                    problems.append(f"{case.id}: {case.persona} cannot read {key}, so the case tests nothing")
+                elif not want and seen:
+                    problems.append(f"{case.id}: {case.persona} can read {key}, which must be hidden from it")
     return problems

@@ -50,7 +50,12 @@ async def run_evals(args, settings: Settings, *, golden, redteam, agent_factory=
     t = report["totals"]
     print(f"golden {t['golden_passed']}/{t['golden_cases']} · leaks {t['leaks']}/{t['redteam_cases']} · "
           f"skipped {t['skipped']} · ${t['cost_usd']:.4f} · report {out / 'report.md'}")
-    return 1 if t["leaks"] else 0
+    if t["leaks"]:
+        return 1
+    if t["unverified"]:
+        _say(f"{t['unverified']} red-team case(s) could not be checked (see the report): not a pass")
+        return 2
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:

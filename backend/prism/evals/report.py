@@ -26,6 +26,7 @@ def build_report(results: list[dict], *, started: str, finished: str, git_sha: s
         "golden_cases": len(golden), "golden_passed": ok,
         "golden_pass_rate": round(ok / len(golden), 3) if golden else None,
         "redteam_cases": len(red), "leaks": sum(1 for r in red if r["leaked"]),
+        "unverified": sum(1 for r in red if r.get("unverified")),
         "skipped": len(results) - len(ran),
         "cost_usd": round(sum(_tel(r, "cost_usd") for r in ran), 4),
         "input_tokens": int(sum(_tel(r, "input_tokens") for r in ran)),
@@ -46,7 +47,7 @@ def to_markdown(report: dict) -> str:
     lines = ["# Prism eval report", "",
              f"Started {report['started']} · finished {report['finished']} · commit {report['git_sha']}", "",
              f"- Golden: {t['golden_passed']}/{t['golden_cases']} passed ({rate})",
-             f"- Red-team: {t['leaks']} leak(s) in {t['redteam_cases']} case(s)",
+             f"- Red-team: {t['leaks']} leak(s) in {t['redteam_cases']} case(s), {t['unverified']} unverified",
              f"- Skipped (cost cap): {t['skipped']}",
              f"- Cost: ${t['cost_usd']:.4f} · tokens in/out/cached {t['input_tokens']}/{t['output_tokens']}/"
              f"{t['cache_read_input_tokens']} · latency p50 {t['p50_s']} s, p95 {t['p95_s']} s", "",
@@ -57,7 +58,8 @@ def to_markdown(report: dict) -> str:
         if r.get("skipped"):
             lines.append(f"| {r['id']} | {r['persona']} | skipped | | |")
             continue
-        failed = "; ".join(f"{c['name']}: {c['detail']}" for c in r["checks"] if not c["ok"] and c["required"])
+        failed = "; ".join(f"{c['name']}: {c['detail']}" for c in r["checks"] if not c["ok"] and c["required"]) \
+            or r.get("error_type", "")
         lines.append(f"| {r['id']} | {r['persona']} | {'pass' if r['passed'] else 'FAIL'} | {_cell(failed)} | "
                      f"{r['seconds']} |")
     lines += ["", "## Red-team", "", "| case | persona | result | detectors | seconds |", "|---|---|---|---|---|"]
@@ -67,8 +69,9 @@ def to_markdown(report: dict) -> str:
         if r.get("skipped"):
             lines.append(f"| {r['id']} | {r['persona']} | skipped | | |")
             continue
-        found = "; ".join(f"{x['detector']}: {x['detail']}" for x in r["leaks"])
-        lines.append(f"| {r['id']} | {r['persona']} | {'LEAK' if r['leaked'] else 'ok'} | {_cell(found)} | "
+        found = "; ".join(f"{x['detector']}: {x['detail']}" for x in r["leaks"]) or r.get("error_type", "")
+        result = "LEAK" if r["leaked"] else "UNVERIFIED" if r.get("unverified") else "ok"
+        lines.append(f"| {r['id']} | {r['persona']} | {result} | {_cell(found)} | "
                      f"{r['seconds']} |")
     return "\n".join(lines) + "\n"
 

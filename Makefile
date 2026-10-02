@@ -71,7 +71,8 @@ e2e:
 
 # Live evals: golden + red-team questions through the running agent and the real model (costs API money; needs
 # scripts/start_backend.sh and ANTHROPIC_API_KEY). Reports in backend/evals/reports/. Exit 1 on any red-team leak.
-eval:
+# eval-check runs first (no model cost): a case whose canary placement is wrong would otherwise pass vacuously.
+eval: eval-check
 	cd backend && HF_HUB_OFFLINE=1 uv run python -m prism.evals.cli --suite all
 
 # The eval case files against the live seed, without the model: references replay, stories hold, canaries are placed.

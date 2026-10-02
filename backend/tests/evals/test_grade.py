@@ -66,3 +66,10 @@ def test_grade_golden_failures():
     assert not passed(checks)
     no_ref = grade_golden(case(), ChatResult(widgets=[widget()]), {"r_aaaaaaaaaaaa": REF}, None)
     assert next(c for c in no_ref if c.name == "rows").detail == "the reference could not be computed"
+
+
+def test_rows_match_fails_cleanly_when_per_key_counts_differ():
+    ref = Table(["k", "v"], [["A", 1], ["A", 2], ["B", 3]])
+    got = Table(["k", "v"], [["A", 1], ["B", 2], ["B", 3]])
+    check = rows_match(ref, got, Tolerance())
+    assert not check.ok and "rows per key" in check.detail

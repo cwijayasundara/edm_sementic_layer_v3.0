@@ -83,3 +83,21 @@ async def test_run_exit_code_follows_leaks(tmp_path):
     code = await run_evals(Args(), Settings(), golden=[], redteam=[], agent_factory=lambda url: FakeClient(),
                            runner_factory=Runner, reports_dir=tmp_path)
     assert code == 1 and len(list(tmp_path.iterdir())) == 1
+
+
+async def test_run_exits_2_with_a_report_when_a_redteam_case_is_unverified(tmp_path, capsys):
+    unverified = [{"suite": "redteam", "id": "r_9", "persona": "cash_ops_emea", "leaked": False, "unverified": True,
+                   "error_type": "OSError", "seconds": 1.0, "telemetry": None, "leaks": [], "summary_excerpt": ""}]
+
+    class Runner:
+        def __init__(self, *a, **kw):
+            pass
+
+        async def run(self, golden, redteam):
+            return unverified
+    code = await run_evals(Args(), Settings(), golden=[], redteam=[], agent_factory=lambda url: FakeClient(),
+                           runner_factory=Runner, reports_dir=tmp_path)
+    assert code == 2 and len(list(tmp_path.iterdir())) == 1
+    assert "could not be checked" in capsys.readouterr().err
+    report = build_report(unverified, started="2026-10-02T10:00:00Z", finished="2026-10-02T10:01:00Z", git_sha="x")
+    assert report["totals"]["unverified"] == 1 and "UNVERIFIED" in to_markdown(report)

@@ -58,6 +58,8 @@ def rows_match(ref: Table, got: Table, tol: Tolerance) -> Check:
     if want.keys() != have.keys():
         return Check("rows", False, "row keys differ from the reference")
     for k, values in want.items():
+        if len(values) != len(have[k]):
+            return Check("rows", False, f"rows per key differ for {k}")
         for a, b in zip(values, have[k], strict=True):
             for x, y in zip(a, b, strict=True):
                 if (x is None) != (y is None) or (x is not None and not _close(x, y, tol)):

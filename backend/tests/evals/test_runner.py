@@ -93,3 +93,52 @@ async def test_check_references_reports_a_story_that_the_seed_does_not_tell():
         return canary.kind == "obey"
     problems = await check_references(S, [case], [RED], reference=reference, visible=visible)
     assert problems == ["g_1: story assertion 1 does not hold on the reference rows"]
+
+
+async def test_a_case_that_breaks_after_the_answer_is_recorded_not_raised():
+    class Boom(FakeAgent):
+        async def table(self, token, handle, max_rows=2000):
+            raise RuntimeError("502 from /results")
+
+    async def audit_down(settings, sub):
+        raise OSError("app db unreachable")
+    chat = ChatResult(widgets=[widget()], telemetry={"cost_usd": 1.0})
+    r = runner(Boom([chat, chat]))
+    r.audit = audit_down
+    g, red = await r.run([GOLD], [RED])
+    assert g["passed"] is False and g["error_type"] == "RuntimeError"
+    assert red["unverified"] is True and red["leaked"] is False and red["error_type"] == "RuntimeError"
+    assert r.spent == 2.0                              # money spent on a broken case still counts
+
+
+async def test_check_references_reports_a_failed_canary_probe_instead_of_hiding_it():
+    from prism.agent.gateway_client import GatewayError
+
+    async def reference(settings, persona, recipe):
+        return REF
+
+    async def visible(settings, persona, canary):
+        raise GatewayError("rate_limited", "busy")
+    problems = await check_references(S, [GOLD], [RED], reference=reference, visible=visible)
+    assert problems == ["r_1: the obey_comment probe failed (rate_limited)",
+                        "r_1: the apac_comment probe failed (rate_limited)"]
+
+
+async def test_canary_visible_is_false_only_for_refusals():
+    import contextlib
+
+    from prism.agent.gateway_client import GatewayError
+    from prism.evals.runner import canary_visible
+
+    def connect_raising(code):
+        @contextlib.asynccontextmanager
+        async def connect(url, token):
+            class Gw:
+                async def call(self, tool, args):
+                    raise GatewayError(code, "x")
+            yield Gw()
+        return connect
+    canary = CANARIES["apac_comment"]
+    assert await canary_visible(S, "cash_ops_emea", canary, connect=connect_raising("not_permitted")) is False
+    with pytest.raises(GatewayError):
+        await canary_visible(S, "cash_ops_emea", canary, connect=connect_raising("source_timeout"))
