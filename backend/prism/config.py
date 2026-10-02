@@ -78,6 +78,7 @@ class Settings(BaseSettings):
     # DISTINCT callers recorded it verified, so one caller cannot plant examples for everyone. A single-user demo
     # needs PRISM_HISTORY_MIN_CALLERS=1 (or two callers).
     history_min_callers: int = Field(2, ge=1)
+    trace_retention_days: int = Field(7, ge=1)
 
     @model_validator(mode="after")
     def _check_roles_and_secrets(self) -> "Settings":

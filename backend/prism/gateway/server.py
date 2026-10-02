@@ -2,7 +2,7 @@
 
 Same transport as the source servers (prism.mcp.base): stateless streamable HTTP with JSON responses, the SDK token
 verifier (audience `gateway-mcp`, HS256 from prism.security.tokens), an explicit Host allow-list. Requests over
-MAX_BODY_BYTES are refused with 413 before the JSON is parsed. The eight tools are in prism.gateway.service; this module
+MAX_BODY_BYTES are refused with 413 before the JSON is parsed. The eleven tools are in prism.gateway.service; this module
 wires them to MCP, builds the runtime and refuses to start when a dependency is missing:
 
   uvicorn prism.gateway.server:create_app_from_env --factory --host 127.0.0.1 --port 8200
@@ -32,7 +32,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 from mcp.server.transport_security import TransportSecuritySettings
 from mcp.types import CallToolResult, ToolAnnotations
 from neo4j import AsyncGraphDatabase, GraphDatabase
-from neo4j.exceptions import AuthError, ConfigurationError, ServiceUnavailable
+from neo4j.exceptions import AuthError, ConfigurationError, Neo4jError, ServiceUnavailable
 from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import JSONResponse
@@ -49,6 +49,7 @@ from prism.graph.catalog import Catalog, CatalogError, aload_catalog, load_catal
 from prism.graph.embedder import Embedder, EmbedderError
 from prism.graph.lineage import alineage
 from prism.graph.retrieval import GraphError, GraphUnavailable, acontext_pack, arun_read
+from prism.graph.traces import TRACE_CONSTRAINT, amark_confirmed, aget_trace, arecord_trace
 from prism.mcp.auth import PrismTokenVerifier, current_claims
 
 log = logging.getLogger("prism.gateway")
@@ -238,9 +239,25 @@ async def lineage(handle: str) -> CallToolResult:
     raise NotImplementedError
 
 
+async def record_trace(run_id: str, question: str, answer: str, path: str, status: str,
+                       steps: list) -> CallToolResult:
+    """Store how one of your own runs reached its answer (the agent calls this; never needed to answer)."""
+    raise NotImplementedError
+
+
+async def get_trace(run_id: str) -> CallToolResult:
+    """One of your own recorded run traces (UI only)."""
+    raise NotImplementedError
+
+
+async def mark_trace_confirmed(run_id: str) -> CallToolResult:
+    """Mark one of your own run traces as confirmed by you (UI only)."""
+    raise NotImplementedError
+
+
 _TOOL_FUNCS = {f.__name__: f for f in (search_context, run_metric, query_source, get_rows, combine, record_answer,
-                                       confirm_answer, lineage)}
-WRITE_TOOLS = frozenset({"record_answer", "confirm_answer"})
+                                       confirm_answer, lineage, record_trace, get_trace, mark_trace_confirmed)}
+WRITE_TOOLS = frozenset({"record_answer", "confirm_answer", "record_trace", "mark_trace_confirmed"})
 
 
 def _register_tools(mcp: MCPServer) -> None:
@@ -369,6 +386,11 @@ def prepare_runtime(settings: Settings) -> Runtime:
         except (ServiceUnavailable, AuthError, OSError) as exc:
             raise GatewayStartupError(f"Neo4j not reachable at {redact_uri(settings.neo4j_uri)} ({type(exc).__name__}): "
                                       f"run `make db`") from None
+        try:
+            driver.execute_query(TRACE_CONSTRAINT)
+        except (ServiceUnavailable, AuthError, OSError, Neo4jError) as exc:
+            raise GatewayStartupError(f"could not prepare the trace store ({type(exc).__name__}): "
+                                      f"run `make db`") from None
         catalog = load_startup_catalog(driver, settings)
     finally:
         driver.close()
@@ -406,8 +428,23 @@ def prepare_runtime(settings: Settings) -> Runtime:
             return await alineage(adriver, plans, sources, claims, combined_inputs=combined, ns=settings.graph_ns,
                                   timeout_s=timeout)
 
+        retention = settings.trace_retention_days * 86_400
+
+        class _Traces:
+            async def record(self, trace, claims):
+                return await arecord_trace(adriver, trace, claims, ns=settings.graph_ns, now=int(time.time()),
+                                           retention_s=retention, timeout_s=timeout)
+
+            async def get(self, run_id, claims):
+                return await aget_trace(adriver, run_id, claims, ns=settings.graph_ns, now=int(time.time()),
+                                        timeout_s=timeout)
+
+            async def confirm(self, run_id, sub):
+                return await amark_confirmed(adriver, run_id, sub, ns=settings.graph_ns, now=int(time.time()),
+                                             timeout_s=timeout)
+
         gateway = Gateway(settings, policy=Policy(catalog), store=store, downstream=Downstream(settings, audit=None),
-                          audit=audit, context=context, lineage=lineage_fn, catalog_probe=probe,
+                          audit=audit, context=context, lineage=lineage_fn, traces=_Traces(), catalog_probe=probe,
                           catalog_loader=loader)
 
         async def close() -> None:

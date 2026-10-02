@@ -29,6 +29,7 @@ from prism.gateway.service import RECORD_BURST
 from prism.gateway.server import (GATEWAY_AUDIENCE, TOOLS, Gateway, GatewayStartupError, check_startup_secrets,
                                   create_app)
 from prism.graph.catalog import Catalog, CatalogError
+from prism.graph.traces import TraceOwned
 from prism.graph.retrieval import GraphUnavailable, acontext_pack, empty_pack
 from prism.mcp.client import mcp_client
 from prism.security.personas import claims_for
@@ -173,9 +174,12 @@ async def test_tool_list_is_exactly_the_gateway_tools(settings, fake_catalog):
     async with gateway_client(settings, make_gateway(settings, fake_catalog)) as c:
         tools = {t.name: t for t in (await c.list_tools()).tools}
     assert set(tools) == {"search_context", "run_metric", "query_source", "get_rows", "combine", "record_answer",
-                          "confirm_answer", "lineage"}
+                          "confirm_answer", "lineage", "record_trace", "get_trace",
+                          "mark_trace_confirmed"}
     assert TOOLS == ("search_context", "run_metric", "query_source", "get_rows", "combine", "record_answer",
-                     "confirm_answer", "lineage")
+                     "confirm_answer", "lineage", "record_trace", "get_trace", "mark_trace_confirmed")
+    assert tools["get_trace"].annotations is not None and tools["get_trace"].annotations.read_only_hint is True
+    assert tools["record_trace"].annotations is None and tools["mark_trace_confirmed"].annotations is None
     assert "source" not in tools["run_metric"].input_schema["properties"]  # the catalog decides the source
     assert set(tools["get_rows"].input_schema["properties"]) == {"handle", "offset", "limit"}
     assert set(tools["lineage"].input_schema["properties"]) == {"handle"}
@@ -1234,3 +1238,133 @@ async def test_lineage_passes_metrics_only_and_maps_graph_outages(settings, fake
 def test_lineage_is_never_offered_to_the_llm():
     assert "lineage" not in GATEWAY_TOOL_NAMES
     assert "lineage" not in {t.name for t in SUPERVISOR_TOOLS + SUBAGENT_TOOLS}
+
+
+# ------------------------------------------------------------------------------------------------ traces
+RUN = "a" * 32
+STEP = {"seq": 0, "kind": "metric", "label": "Ran metric open_breaks", "tool": "run_metric",
+        "args": {"metric_id": "open_breaks"}}
+
+
+class FakeTraces:
+    def __init__(self):
+        self.saved: dict[str, tuple[dict, dict]] = {}
+        self.confirmed: set[str] = set()
+        self.fail: Exception | None = None
+
+    async def record(self, trace, claims):
+        if self.fail:
+            raise self.fail
+        old = self.saved.get(trace["run_id"])
+        if old and old[0]["sub"] != trace["sub"]:
+            raise TraceOwned()
+        self.saved[trace["run_id"]] = (trace, claims)
+        return len(trace["steps"])
+
+    async def get(self, run_id, claims):
+        t = self.saved.get(run_id)
+        return {"run_id": run_id, "steps": t[0]["steps"]} if t and t[0]["sub"] == claims["sub"] else None
+
+    async def confirm(self, run_id, sub):
+        t = self.saved.get(run_id)
+        if t and t[0]["sub"] == sub:
+            self.confirmed.add(run_id)
+            return True
+        return False
+
+
+async def test_record_trace_derives_links_from_the_callers_own_handle(settings, fake_catalog):
+    traces, audit = FakeTraces(), FakeAudit()
+    gw = make_gateway(settings, fake_catalog, audit=audit, traces=traces)
+    async with gateway_client(settings, gw, "cash_ops_emea") as c:
+        h = body(await c.call_tool("run_metric", {"metric_id": "open_breaks", "dimensions": ["region"]}))["handle"]
+        out = body(await c.call_tool("record_trace", {"run_id": RUN, "question": "q", "answer": "a", "path": "metric",
+                                                      "status": "ok", "steps": [{**STEP, "handle": h}]}))
+    assert out == {"recorded": True, "steps": 1}
+    trace, claims = traces.saved[RUN]
+    assert trace["sub"] == "cash_ops_emea" and claims["metrics_only"] is False
+    (step,) = trace["steps"]
+    assert sorted(step["touched"]) == ["dim:open_breaks.region", "metric:open_breaks"]
+    assert step["rows"] == 12 and step["truncated"] is False          # from the stored result, not the agent
+    assert trace["answered"] == ["metric:open_breaks"]
+    assert step["args_json"] == '{"metric_id":"open_breaks"}'
+    row = audit.rows[-1]
+    assert (row["tool"], row["status"], row["rows"]) == ("record_trace", "ok", 1)
+    assert RUN not in str(audit.events[-1]) and "Ran metric" not in str(audit.events[-1])
+
+
+async def test_record_trace_foreign_handle_gets_no_links(settings, fake_catalog):
+    traces = FakeTraces()
+    gw = make_gateway(settings, fake_catalog, traces=traces)
+    _, app = create_app(settings, gateway=gw)
+    async with serving(app) as base:
+        async with mcp_client(f"{base}/mcp", token(settings, "head_data")) as head:
+            h = body(await head.call_tool("run_metric", {"metric_id": "open_breaks"}))["handle"]
+        async with mcp_client(f"{base}/mcp", token(settings, "cash_ops_emea")) as other:
+            body(await other.call_tool("record_trace", {"run_id": RUN, "question": "q", "answer": "a",
+                                                        "path": "metric", "status": "ok",
+                                                        "steps": [{**STEP, "handle": h, "touched": ["metric:x"]}]}))
+    (step,) = traces.saved[RUN][0]["steps"]
+    assert step["touched"] == [] and step["rows"] is None and traces.saved[RUN][0]["answered"] == []
+
+
+async def test_record_trace_caps_text_and_refuses_too_many_steps(settings, fake_catalog):
+    traces = FakeTraces()
+    gw = make_gateway(settings, fake_catalog, traces=traces)
+    async with gateway_client(settings, gw, "head_data") as c:
+        body(await c.call_tool("record_trace", {"run_id": RUN, "question": "q" * 3000, "answer": "a", "path": "p",
+                                                "status": "ok", "steps": [{**STEP, "note": "n" * 900,
+                                                                           "label": "l" * 300}]}))
+        many = await c.call_tool("record_trace", {"run_id": "b" * 32, "question": "q", "answer": "a", "path": "p",
+                                                  "status": "ok", "steps": [STEP] * 41})
+    trace = traces.saved[RUN][0]
+    assert len(trace["question"]) == 2000 and len(trace["steps"][0]["note"]) == 500
+    assert len(trace["steps"][0]["label"]) == 200
+    assert many.is_error and "invalid_request" in text(many)
+
+
+async def test_record_trace_refuses_another_callers_run_id_like_a_bad_request(settings, fake_catalog):
+    traces = FakeTraces()
+    gw = make_gateway(settings, fake_catalog, traces=traces)
+    args = {"run_id": RUN, "question": "q", "answer": "a", "path": "p", "status": "ok", "steps": [STEP]}
+    _, app = create_app(settings, gateway=gw)
+    async with serving(app) as base:
+        async with mcp_client(f"{base}/mcp", token(settings, "head_data")) as head:
+            body(await head.call_tool("record_trace", args))
+        async with mcp_client(f"{base}/mcp", token(settings, "steward")) as other:
+            r = await other.call_tool("record_trace", args)
+            bad = await other.call_tool("record_trace", {**args, "run_id": "not-a-run"})
+    assert r.is_error and "invalid_request" in text(r) and "invalid_request" in text(bad)
+    assert traces.saved[RUN][0]["sub"] == "head_data"
+
+
+async def test_get_trace_and_confirm_are_owner_only(settings, fake_catalog):
+    traces = FakeTraces()
+    gw = make_gateway(settings, fake_catalog, traces=traces)
+    args = {"run_id": RUN, "question": "q", "answer": "a", "path": "p", "status": "ok", "steps": [STEP]}
+    _, app = create_app(settings, gateway=gw)
+    async with serving(app) as base:
+        async with mcp_client(f"{base}/mcp", token(settings, "head_data")) as head:
+            body(await head.call_tool("record_trace", args))
+            assert body(await head.call_tool("get_trace", {"run_id": RUN}))["run_id"] == RUN
+            assert body(await head.call_tool("mark_trace_confirmed", {"run_id": RUN})) == {"confirmed": True}
+        async with mcp_client(f"{base}/mcp", token(settings, "steward")) as other:
+            foreign = await other.call_tool("get_trace", {"run_id": RUN})
+            missing = await other.call_tool("get_trace", {"run_id": "c" * 32})
+            unconf = await other.call_tool("mark_trace_confirmed", {"run_id": RUN})
+    assert foreign.is_error and text(foreign) == text(missing) and "unknown_trace" in text(foreign)
+    assert unconf.is_error and "unknown_trace" in text(unconf)
+
+
+async def test_trace_store_outage_maps_to_context_unavailable(settings, fake_catalog):
+    traces = FakeTraces()
+    traces.fail = GraphUnavailable("down")
+    gw = make_gateway(settings, fake_catalog, traces=traces)
+    r = await call(settings, gw, "head_data", "record_trace", {"run_id": RUN, "question": "q", "answer": "a",
+                                                                "path": "p", "status": "ok", "steps": [STEP]})
+    assert r.is_error and "context_unavailable" in text(r) and "down" not in text(r)
+
+
+def test_trace_tools_are_never_offered_to_the_llm():
+    names = {t.name for t in SUPERVISOR_TOOLS + SUBAGENT_TOOLS} | set(GATEWAY_TOOL_NAMES)
+    assert not names & {"record_trace", "get_trace", "mark_trace_confirmed"}

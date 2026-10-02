@@ -1,4 +1,4 @@
-"""The Semantic Gateway's eight tools, independent of the MCP transport (prism.gateway.server wires them up).
+"""The Semantic Gateway's eleven tools, independent of the MCP transport (prism.gateway.server wires them up).
 
 `Gateway.call_tool(name, claims, arguments)` is the single entry point. `claims` are the VERIFIED token claims (the
 caller's identity never comes from tool arguments). Every call, including unknown tools, invalid arguments, refusals,
@@ -30,7 +30,7 @@ import time
 import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from typing import Annotated, Any
+from typing import Annotated, Any, Protocol
 
 import anyio
 from mcp.types import CallToolResult, TextContent
@@ -45,11 +45,18 @@ from prism.gateway.policy import MAX_DIMENSIONS, MAX_FILTERS, MAX_LIMIT, Policy,
 from prism.gateway.results import PAGE_DEFAULT, PAGE_MAX, ResultStore
 from prism.graph.catalog import Catalog, CatalogError
 from prism.graph.retrieval import GraphError, GraphUnavailable
+from prism.graph.traces import TraceOwned, args_json
 
 log = logging.getLogger("prism.gateway")
 
 TOOLS = ("search_context", "run_metric", "query_source", "get_rows", "combine", "record_answer", "confirm_answer",
-         "lineage")
+         "lineage", "record_trace", "get_trace", "mark_trace_confirmed")
+MAX_TRACE_STEPS = 40
+TRACE_TEXT = {"label": 200, "note": 500, "question": 2000, "answer": 2000}
+TRACE_ARGS_CHARS = 2000
+TRACE_CONSIDERED = 20
+RUN_ID_PATTERN = r"^[0-9a-f]{32}$"
+TRACE_KINDS = ("context", "metric", "query", "combine", "delegate", "visualize", "answer", "refusal", "error")
 MAX_QUESTION_CHARS = 2000
 MAX_PLAN_CHARS = 4000
 MAX_ITEMS = 20
@@ -143,10 +150,46 @@ class LineageArgs(_Args):
     handle: Annotated[str, Field(min_length=1, max_length=64, description="One of your own result handles")]
 
 
+class TraceStepArgs(_Args):
+    seq: Annotated[StrictInt, Field(ge=0, le=999)]
+    parent: Annotated[StrictInt | None, Field(ge=0, le=999)] = None
+    kind: Annotated[str, Field(pattern="^(" + "|".join(TRACE_KINDS) + ")$")]
+    label: Annotated[str, Field(max_length=4000)] = ""
+    note: Annotated[str | None, Field(max_length=4000)] = None
+    considered: Annotated[list[Annotated[str, Field(max_length=MAX_NAME)]], Field(max_length=100)] = []
+    ms: Annotated[float | None, Field(ge=0)] = None
+    status: Annotated[str | None, Field(max_length=32)] = None
+    error_code: Annotated[str | None, Field(max_length=64)] = None
+    tool: Annotated[str | None, Field(max_length=64)] = None
+    args: Any = None
+    handle: Annotated[str | None, Field(max_length=64)] = None
+    touched: Any = None          # accepted and ignored: links come from handles only
+
+
+class RecordTraceArgs(_Args):
+    run_id: Annotated[str, Field(pattern=RUN_ID_PATTERN)]
+    question: Annotated[str, Field(max_length=8000)]
+    answer: Annotated[str, Field(max_length=8000)] = ""
+    path: Annotated[str | None, Field(max_length=32)] = None
+    status: Annotated[str, Field(max_length=32)]
+    steps: Annotated[list[TraceStepArgs], Field(max_length=MAX_TRACE_STEPS)]
+
+
+class RunIdArgs(_Args):
+    run_id: Annotated[str, Field(pattern=RUN_ID_PATTERN)]
+
+
+class TraceStore(Protocol):
+    async def record(self, trace: dict, claims: dict) -> int: ...
+    async def get(self, run_id: str, claims: dict) -> dict | None: ...
+    async def confirm(self, run_id: str, sub: str) -> bool: ...
+
+
 ARG_MODELS: dict[str, type[_Args]] = {
     "search_context": SearchContextArgs, "run_metric": RunMetricArgs, "query_source": QuerySourceArgs,
     "get_rows": GetRowsArgs, "combine": CombineArgs, "record_answer": RecordAnswerArgs,
     "confirm_answer": ConfirmAnswerArgs, "lineage": LineageArgs,
+    "record_trace": RecordTraceArgs, "get_trace": RunIdArgs, "mark_trace_confirmed": RunIdArgs,
 }
 _JSON_FIELDS = {name: {f for f, info in model.model_fields.items() if info.annotation is not str}
                 for name, model in ARG_MODELS.items()}
@@ -201,7 +244,8 @@ def _error(tool: str, code: str, message: str) -> CallToolResult:
 # ------------------------------------------------------------------------------------------------ gateway
 class Gateway:
     def __init__(self, settings, *, policy: Policy, store: ResultStore, downstream, audit, context: ContextFn,
-                 lineage: LineageFn | None = None, context_timeout_s: float = CONTEXT_TIMEOUT_S,
+                 lineage: LineageFn | None = None, traces: TraceStore | None = None,
+                 context_timeout_s: float = CONTEXT_TIMEOUT_S,
                  catalog_probe: Callable[[], Awaitable[int | None]] | None = None,
                  catalog_loader: Callable[[], Awaitable[Catalog]] | None = None,
                  refresh_s: float | None = None):
@@ -209,6 +253,7 @@ class Gateway:
         self.policy = policy   # replaced as a whole on catalog refresh; each call reads it once
         self.store, self.downstream, self.audit, self.context = store, downstream, audit, context
         self.lineage = lineage
+        self.traces = traces
         self.context_timeout_s = context_timeout_s
         self.catalog_probe, self.catalog_loader = catalog_probe, catalog_loader
         self.refresh_s = refresh_s if refresh_s is not None else settings.gateway_catalog_refresh_s
@@ -402,6 +447,87 @@ class Gateway:
         rec.fields["rows"] = len(graph["nodes"])
         return {**graph, "governed": bool(plans)}
 
+    def _trace_touched(self, sub: str, handle: str | None) -> tuple[list[str], list[str], int | None, bool | None]:
+        """(touched local uids, answered metric uids, rows, truncated) of one of the caller's own handles; nothing
+        for another caller's, an expired or a made-up handle."""
+        if not handle:
+            return [], [], None, None
+        try:
+            entry = self.store.get(sub, handle)
+            plans, sources, _ = self._lineage_plan(sub, handle)
+        except GatewayError:
+            return [], [], None, None
+        metrics = [f"metric:{m}" for m in sorted(plans)]
+        dims = [f"dim:{m}.{d}" for m in sorted(plans) for d in sorted(plans[m])]
+        touched = metrics + dims + [f"source:{x}" for x in sources]
+        return touched, metrics, len(entry.rows), bool(entry.meta.get("truncated", False))
+
+    def _require_traces(self) -> TraceStore:
+        if self.traces is None:
+            raise GatewayError("context_unavailable", "the context graph is unavailable; try again shortly")
+        return self.traces
+
+    async def _record_trace(self, claims: dict, args: RecordTraceArgs, rec: CallRecord) -> dict:
+        sub = claims["sub"]
+        store = self._require_traces()
+        steps, answered = [], []
+        for st in args.steps:
+            touched, metrics, rows, truncated = self._trace_touched(sub, st.handle)
+            answered += [m for m in metrics if m not in answered]
+            steps.append({"seq": st.seq, "parent": st.parent, "kind": st.kind,
+                          "label": st.label[:TRACE_TEXT["label"]],
+                          "note": st.note[:TRACE_TEXT["note"]] if st.note else None,
+                          "considered": list(st.considered[:TRACE_CONSIDERED]), "ms": st.ms, "status": st.status,
+                          "error_code": st.error_code, "tool": st.tool,
+                          "args_json": args_json(st.args, TRACE_ARGS_CHARS), "handle": st.handle if rows is not None
+                          else None, "rows": rows, "truncated": truncated, "touched": touched})
+        trace = {"run_id": args.run_id, "sub": sub, "question": args.question[:TRACE_TEXT["question"]],
+                 "answer": args.answer[:TRACE_TEXT["answer"]], "path": args.path, "status": args.status,
+                 "answered": answered, "steps": steps}
+        safe = {**claims, "metrics_only": is_metrics_only(claims)}
+        release = await self.record_limiter.acquire(sub)
+        try:
+            n = await store.record(trace, safe)
+        except TraceOwned:
+            raise GatewayError("invalid_request", "invalid trace") from None
+        except (TimeoutError, GraphUnavailable, GraphError):
+            raise GatewayError("context_unavailable", "the context graph is unavailable; try again shortly") from None
+        finally:
+            release()
+        rec.fields["rows"] = n
+        return {"recorded": True, "steps": n}
+
+    async def _get_trace(self, claims: dict, args: RunIdArgs, rec: CallRecord) -> dict:
+        sub = claims["sub"]
+        store = self._require_traces()
+        safe = {**claims, "metrics_only": is_metrics_only(claims)}
+        release = await self.context_limiter.acquire(sub)
+        try:
+            async with asyncio.timeout(self.context_timeout_s):
+                trace = await store.get(args.run_id, safe)
+        except (TimeoutError, GraphUnavailable, GraphError):
+            raise GatewayError("context_unavailable", "the context graph is unavailable; try again shortly") from None
+        finally:
+            release()
+        if trace is None:
+            raise GatewayError("unknown_trace", "unknown trace")
+        rec.fields["rows"] = len(trace.get("steps") or [])
+        return trace
+
+    async def _mark_trace_confirmed(self, claims: dict, args: RunIdArgs, rec: CallRecord) -> dict:
+        sub = claims["sub"]
+        store = self._require_traces()
+        release = await self.confirm_limiter.acquire(sub)
+        try:
+            ok = await store.confirm(args.run_id, sub)
+        except (TimeoutError, GraphUnavailable, GraphError):
+            raise GatewayError("context_unavailable", "the context graph is unavailable; try again shortly") from None
+        finally:
+            release()
+        if not ok:
+            raise GatewayError("unknown_trace", "unknown trace")
+        return {"confirmed": True}
+
     def _metric_backed(self, sub: str, handle: str, depth: int = 0) -> bool:
         """True when `handle` is a run_metric result whose recorded plan names >= 1 catalog metric (all of them in the
         catalog), or a combine whose every input is still stored and itself metric-backed. Fails closed: a
@@ -551,4 +677,4 @@ class Gateway:
 
 
 __all__ = ["ARG_MODELS", "CallRecord", "Gateway", "MAX_ARGUMENT_BYTES", "QUERY_SHAPE", "TOOLS", "LineageArgs",
-           "LineageFn"]
+           "LineageFn", "RecordTraceArgs", "RunIdArgs", "TraceStore"]
