@@ -88,7 +88,7 @@ def test_unknown_names_list_valid():
     m = METRICS["open_breaks"]
     with pytest.raises(MetricError) as e:
         compile_metric(m, dimensions=["desk"], as_of=AS_OF)
-    assert "valid: ['break_type', 'ccy', 'legal_entity_id', 'region']" in str(e.value)
+    assert "valid: ['bank_source_id', 'break_type', 'ccy', 'legal_entity_id', 'region']" in str(e.value)
     with pytest.raises(MetricError) as e:
         compile_metric(m, filters={"desk": "x"}, as_of=AS_OF)
     assert "'region'" in str(e.value) and "'age_days'" in str(e.value)
@@ -497,8 +497,9 @@ def test_every_identifier_by_date_metric_classifies_its_grain():
 
 def test_entity_by_date_metrics_are_fine_grained():
     fine = {mid: sorted(m.fine_grain_dimensions) for mid, m, _ in _registry_metrics()}
-    for mid in ("recon_unmatched_items", "open_position_exceptions", "position_exceptions",
-                "nav_breaches_above_5bps", "nav_break_bps_max"):
+    for mid in ("open_position_exceptions", "position_exceptions"):
+        assert fine[mid] == ["business_date", "portfolio_id", "security_id"], mid
+    for mid in ("recon_unmatched_items", "nav_breaches_above_5bps", "nav_break_bps_max"):
         assert fine[mid] == ["nav_date" if "nav" in mid else "business_date", "portfolio_id"], mid
     for mid in ("avg_feed_latency_min", "feed_on_time_rate", "late_feeds", "missing_or_failed_deliveries"):
         assert fine[mid] == ["business_date", "source_id"], mid
