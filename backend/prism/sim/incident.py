@@ -20,6 +20,7 @@ from prism.sim.calendar import at
 from prism.sim.ids import make_lei
 from prism.sim.keys import delivery_id, feed_id, fund_cash_account_id, fund_entity_id
 from prism.sim.model import TableData
+from prism.sim.project_assetrecon import INV_OPS
 from prism.sim.project_marketmaster import STAGES
 from prism.sim.project_refmaster import STEWARDS
 from prism.sim.universe import (INCIDENT_SPLIT_FROM_END, LEGAL_SUFFIX, REGION_OF, VENDOR_COVERAGE, VENDOR_RANK, VENDORS,
@@ -194,6 +195,69 @@ def recount_price_stages(u: Universe, t: dict[str, TableData]) -> None:
             _set(dq, at_key[(d, "price", stage)], count=count)
 
 
+# ----------------------------------------------------------------------------------------------- assetrecon
+def _assetrecon(u: Universe, inc: Incident, t: dict[str, TableData]) -> None:
+    n = len(u.days)
+    split, fix = n - SPLIT_FROM_END, n - FIX_FROM_END
+    split_days = _split_days(u)
+    x, holders = inc.security_id, set(inc.holder_ids)
+    day = {d: i for i, d in enumerate(u.days)}
+    unsplit = {pid: dict(u.holdings[pid])[x] for pid in holders}
+    extra = {pid: q * (SPLIT_RATIO - 1) for pid, q in unsplit.items()}   # shares the split adds
+
+    def price(i: int) -> float:            # post-split price; golden == market for a non-stale security
+        return u.prices[x][i] / SPLIT_RATIO
+
+    def mine(r: dict, date_col: str) -> bool:
+        return r["security_id"] == x and r["portfolio_id"] in holders and day[r[date_col]] >= split
+
+    ip = t["internal_positions"]
+    for k, r in enumerate(ip.dicts()):
+        if mine(r, "as_of"):
+            i = day[r["as_of"]]
+            qty = unsplit[r["portfolio_id"]] * (SPLIT_RATIO if i >= fix else 1)   # fixed by hand from FIX
+            _set(ip, k, qty=qty, mv=round(qty * price(i), 2))
+    cp = t["custodian_positions"]
+    for k, r in enumerate(cp.dicts()):
+        if mine(r, "as_of"):                                  # the custodian applied the split
+            qty = r["qty"] + extra[r["portfolio_id"]]
+            _set(cp, k, qty=qty, mv=round(qty * price(day[r["as_of"]]), 2))
+    rx = t["recon_exceptions"]
+    covered = set()
+    for k, r in enumerate(rx.dicts()):
+        if mine(r, "business_date"):
+            i = day[r["business_date"]]
+            if r["business_date"] in split_days:              # a booking difference already drawn that day
+                diff = r["diff_qty"] + extra[r["portfolio_id"]]
+                _set(rx, k, diff_qty=diff, diff_mv=round(diff * price(i), 2), cause_code="corporate_action",
+                     status="closed")
+                covered.add((r["portfolio_id"], r["business_date"]))
+            else:
+                _set(rx, k, diff_mv=round(r["diff_qty"] * price(i), 2))
+    runs = t["recon_runs"]
+    run_at = {(r["portfolio_id"], r["recon_type"], r["business_date"]): k for k, r in enumerate(runs.dicts())
+              if r["portfolio_id"] in holders and r["business_date"] in split_days}
+    next_rx = _next_id(rx, "exc_id", "RX", 7)
+    fund_group = {p.portfolio_id: p.fund_group for p in u.portfolios}
+    for pid in sorted(holders):
+        for d in split_days:
+            _set(runs, run_at[(pid, "nav", d)], matched=0, unmatched=1)
+            if (pid, d) in covered:
+                continue
+            k = run_at[(pid, "position", d)]
+            run = dict(zip(runs.columns, runs.rows[k]))
+            _set(runs, k, matched=run["matched"] - 1, unmatched=run["unmatched"] + 1)
+            rx.add(next_rx(), run["run_id"], pid, x, d, extra[pid], round(extra[pid] * price(day[d]), 2),
+                   "corporate_action", INV_OPS[0], "closed", d + timedelta(days=2), fund_group[pid])
+    nav = t["nav_checks"]
+    for k, r in enumerate(nav.dicts()):
+        if r["portfolio_id"] in holders and r["nav_date"] in split_days:
+            # the internal book kept the unsplit quantity at the halved golden price; the administrator did not
+            internal = round(r["internal_nav"] - extra[r["portfolio_id"]] * price(day[r["nav_date"]]), 2)
+            _set(nav, k, internal_nav=internal,
+                 diff_bps=round((internal - r["admin_nav"]) / r["admin_nav"] * 1e4, 3))
+
+
 # ----------------------------------------------------------------------------------------------- entry point
 def apply_incident(u: Universe, tables: dict[str, dict[str, TableData]]) -> None:
     inc = u.stories.incident
@@ -201,3 +265,4 @@ def apply_incident(u: Universe, tables: dict[str, dict[str, TableData]]) -> None
     _refmaster(u, inc, rng, tables["refmaster"])
     _feedhub(u, inc, rng, tables["feedhub"])
     _marketmaster(u, inc, rng, tables["marketmaster"])
+    _assetrecon(u, inc, tables["assetrecon"])

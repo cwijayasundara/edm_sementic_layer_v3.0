@@ -3,8 +3,8 @@ import copy
 
 import pytest
 
-from prism.sim.incident import (CA_FEED_TYPE, FAILED_FROM_END, NOISE_CORPORATE_ACTIONS, NOISE_SPIKES, SPLIT_FROM_END,
-                                _next_id, apply_incident)
+from prism.sim.incident import (CA_FEED_TYPE, FAILED_FROM_END, FIX_FROM_END, NOISE_CORPORATE_ACTIONS, NOISE_SPIKES,
+                                SPLIT_FROM_END, _next_id, apply_incident)
 from prism.sim.keys import fund_entity_id
 from prism.sim.model import TableData
 from prism.sim.seed import PROJECTORS
@@ -153,3 +153,50 @@ def test_price_funnel_counts_every_suspect(after, universe):
     rows = [r for r in after["marketmaster"]["dq_stage_metrics"].dicts()
             if r["domain"] == "price" and r["stage"] == "suspect" and r["business_date"] in window]
     assert rows and all(r["count"] == per_day[r["business_date"]] for r in rows)
+
+
+def _rows(tables, db, name, **match):
+    return [r for r in tables[db][name].dicts() if all(r[k] == v for k, v in match.items())]
+
+
+def test_every_holder_breaches_nav_on_the_two_split_days(after, universe):
+    inc, n = universe.stories.incident, len(universe.days)
+    for pid in inc.holder_ids:
+        for i in (n - SPLIT_FROM_END, n - SPLIT_FROM_END + 1):
+            (nav,) = _rows(after, "assetrecon", "nav_checks", portfolio_id=pid, nav_date=universe.days[i])
+            assert nav["diff_bps"] < -5, (pid, nav)                      # internal NAV fell: half the value missing
+
+
+def test_positions_show_the_split_and_the_manual_fix(after, before, universe):
+    inc, n = universe.stories.incident, len(universe.days)
+    for pid in inc.holder_ids:
+        q0 = dict(universe.holdings[pid])[inc.security_id]
+        for i in range(n - SPLIT_FROM_END, n):
+            d = universe.days[i]
+            internal = {r["qty"] for r in _rows(after, "assetrecon", "internal_positions", portfolio_id=pid,
+                                                security_id=inc.security_id, as_of=d)}
+            assert internal == {q0 * (2 if i >= n - FIX_FROM_END else 1)}
+            (old,) = _rows(before, "assetrecon", "custodian_positions", portfolio_id=pid, security_id=inc.security_id,
+                           as_of=d)
+            (new,) = _rows(after, "assetrecon", "custodian_positions", portfolio_id=pid, security_id=inc.security_id,
+                           as_of=d)
+            assert new["qty"] == old["qty"] + q0
+
+
+def test_split_days_raise_one_closed_corporate_action_exception_per_holder(after, universe):
+    inc, n = universe.stories.incident, len(universe.days)
+    for pid in inc.holder_ids:
+        for i in (n - SPLIT_FROM_END, n - SPLIT_FROM_END + 1):
+            d = universe.days[i]
+            (x,) = _rows(after, "assetrecon", "recon_exceptions", portfolio_id=pid, security_id=inc.security_id,
+                         business_date=d)
+            assert (x["cause_code"], x["status"]) == ("corporate_action", "closed")
+            (cust,) = _rows(after, "assetrecon", "custodian_positions", portfolio_id=pid, security_id=inc.security_id,
+                            as_of=d)
+            internal = _rows(after, "assetrecon", "internal_positions", portfolio_id=pid,
+                             security_id=inc.security_id, as_of=d)[0]
+            assert x["diff_qty"] == cust["qty"] - internal["qty"]
+            (run,) = _rows(after, "assetrecon", "recon_runs", run_id=x["run_id"])
+            assert run["unmatched"] == len(_rows(after, "assetrecon", "recon_exceptions", run_id=x["run_id"]))
+            (nav_run,) = _rows(after, "assetrecon", "recon_runs", portfolio_id=pid, recon_type="nav", business_date=d)
+            assert (nav_run["matched"], nav_run["unmatched"]) == (0, 1)
