@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 import random
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, timedelta
 from functools import cached_property
 
@@ -68,6 +68,9 @@ CASH_CCYS = ("USD", "EUR", "GBP", "JPY", "CHF", "SGD")
 LATE_CUSTODIAN_PORTFOLIOS = ("PF001", "PF002", "PF005")
 NAV_PORTFOLIOS = ("PF003", "PF009")
 STALE_JUMP = 1.06
+INCIDENT_ANCHOR = "PF003"
+INCIDENT_SPLIT_FROM_END = 5            # the missed split is effective 24 Sep for the default as-of
+INCIDENT_MIN_HALF_WEIGHT_BPS = 10.0    # halving the security moves every holder's NAV by at least this much
 
 SCALED_FIELDS = ("n_securities", "n_entities", "n_portfolios", "n_cash_accounts")
 
@@ -171,6 +174,16 @@ class CashAccount:
 
 
 @dataclass(frozen=True)
+class Incident:
+    """M9 cross-system incident ids (spec 2026-10-03 §2.2), chosen by choose_incident (no RNG)."""
+    security_id: str
+    issuer_entity_id: str
+    source_id: str                 # S*: the anchor portfolio's custodian feed source
+    anchor_portfolio_id: str
+    holder_ids: tuple[str, ...]    # every portfolio holding the security, sorted
+
+
+@dataclass(frozen=True)
 class Stories:
     """Planted, verifiable demo narratives (spec §2 'Planted stories')."""
     late_custodian_source_id: str
@@ -186,6 +199,7 @@ class Stories:
     usd_break_account_ids: tuple[str, ...] = ("CA0001", "CA0002")
     nav_portfolio_ids: tuple[str, ...] = NAV_PORTFOLIOS
     stale_days: int = 3
+    incident: Incident | None = None
 
 
 @dataclass
@@ -393,6 +407,35 @@ def _make_cash_accounts(rng, cfg, house, sources, story_entity) -> list[CashAcco
     return out
 
 
+def choose_incident(u: Universe) -> Incident:
+    """The missed-split security (spec §2.2, refined): an active, non-stale equity held by the anchor portfolio and by
+    no late-custodian portfolio (their positions are frozen on the last good delivery, so they could not show the
+    split), whose halving moves every holder's NAV by at least INCIDENT_MIN_HALF_WEIGHT_BPS (so every holder breaches
+    5 bps); most holders first, then the lowest id. No RNG draw."""
+    i = len(u.days) - INCIDENT_SPLIT_FROM_END
+    holders: dict[str, dict[str, float]] = {}
+    for pid in sorted(u.holdings):
+        for sid, qty in u.holdings[pid]:
+            holders.setdefault(sid, {})[pid] = qty
+    nav = {pid: sum(q * u.golden(sid, i) for sid, q in h) for pid, h in u.holdings.items()}
+    stale, late = set(u.stories.stale_security_ids), set(u.stories.late_portfolio_ids)
+
+    def eligible(s: Security) -> bool:
+        hs = holders.get(s.security_id, {})
+        return (s.asset_class == "Equity" and s.status == "active" and s.security_id not in stale
+                and INCIDENT_ANCHOR in hs and not late & set(hs)
+                and all(q * u.prices[s.security_id][i] / 2 / nav[p] * 1e4 >= INCIDENT_MIN_HALF_WEIGHT_BPS
+                        for p, q in hs.items()))
+
+    candidates = [s for s in u.securities if eligible(s)]
+    if not candidates:
+        raise ValueError(f"no incident security: {INCIDENT_ANCHOR} holds no eligible equity; change the seed")
+    x = min(candidates, key=lambda s: (-len(holders[s.security_id]), s.security_id))
+    anchor = next(p for p in u.portfolios if p.portfolio_id == INCIDENT_ANCHOR)
+    return Incident(x.security_id, x.issuer_entity_id, anchor.custodian_source_id, INCIDENT_ANCHOR,
+                    tuple(sorted(holders[x.security_id])))
+
+
 def build_universe(cfg: SimConfig) -> Universe:
     rng = random.Random(cfg.seed)
     days = business_days(cfg.as_of, cfg.n_days)
@@ -423,4 +466,6 @@ def build_universe(cfg: SimConfig) -> Universe:
         path = prices[sid]
         for i in range(len(days) - stories.stale_days, len(days)):
             path[i] = round(path[i] * STALE_JUMP, 6)
-    return Universe(cfg, days, entities, securities, prices, sources, portfolios, holdings, cash_accounts, stories)
+    u = Universe(cfg, days, entities, securities, prices, sources, portfolios, holdings, cash_accounts, stories)
+    u.stories = replace(stories, incident=choose_incident(u))   # draw-free, after the stale jump
+    return u
