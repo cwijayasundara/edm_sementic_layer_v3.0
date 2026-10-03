@@ -40,9 +40,10 @@ DEFAULT_TIMEOUT_S = 5.0
 # Typed lists (embedding spike: one shared list lets glossary terms push metrics down): per-kind top-n.
 KIND_LIMITS = {"Metric": 5, "BusinessTerm": 3, "Concept": 2, "Column": 5, "Question": 3}
 PATH_RELS = "COMPUTED_FROM|BACKED_BY|HAS_COLUMN|REFERENCES|SAME_KEY_AS"
-PACK_KEYS = ("metrics", "terms", "concepts", "columns", "examples", "join_paths")
+PACK_KEYS = ("metrics", "terms", "concepts", "columns", "examples", "join_paths", "metric_links")
 # Trimming drops the lowest-ranked item first; on equal rank, the first kind listed here goes first.
-DROP_ORDER = ("examples", "columns", "join_paths", "concepts", "terms", "metrics")
+DROP_ORDER = ("examples", "columns", "join_paths", "metric_links", "concepts", "terms", "metrics")
+MAX_LINKED_METRICS = 4   # one-hop JOINABLE_ON expansion: extra metric slots after the direct hits, one per new source
 
 
 class GraphUnavailable(Exception):
@@ -86,6 +87,14 @@ def gate(x: str) -> str:
     used = f"({x})-[:ANSWERED_BY]->{{0,1}}(:Execution)-[:USED]->({u})"
     return (f"({_scoped(x)} AND (NOT ({x}:Question OR {x}:Execution) OR"
             f" (EXISTS {{ MATCH {used} }} AND NOT EXISTS {{ MATCH {used} WHERE NOT ({_scoped(u)}) }})))")
+
+
+def _metric_map(x: str) -> str:
+    """Cypher map projection of Metric `x` with its visible dimension names (shared by expand and linking)."""
+    return (f"{x} {{.uid, .local_uid, .id, .source, .kind, .mcp_tool, .endpoint_id, .unit, .definition, "
+            f".required_dimensions, .sensitive_dimensions, .filters, .time_column, .tables, "
+            f"dims: COLLECT {{ MATCH ({x})-[:HAS_DIMENSION]->(d:Dimension) WHERE {gate('d')} "
+            f"RETURN d.name ORDER BY d.name }}}}")
 
 
 SEARCH_CYPHER = f"""
@@ -135,10 +144,7 @@ CALL (hs) {{
     WHERE h.origin IS NULL AND {gate('e')} AND {gate('m')} RETURN m        // curated seed questions only
   }}
   WITH m, min(i) AS r ORDER BY r, m.id LIMIT $max_metrics
-  RETURN collect(m {{.uid, .local_uid, .id, .source, .kind, .mcp_tool, .endpoint_id, .unit, .definition,
-                    .required_dimensions, .sensitive_dimensions, .filters, .time_column, .tables,
-                    dims: COLLECT {{ MATCH (m)-[:HAS_DIMENSION]->(d:Dimension) WHERE {gate('d')}
-                                     RETURN d.name ORDER BY d.name }}}}) AS metrics
+  RETURN collect({_metric_map('m')}) AS metrics
 }}
 CALL (hs) {{
   UNWIND hs AS t WITH t WHERE t:BusinessTerm
@@ -203,6 +209,25 @@ RETURN pr[0] AS start, pr[1] AS end, length(p) AS hops,
        [r IN relationships(p) WHERE type(r) IN ['REFERENCES', 'SAME_KEY_AS'] |
           startNode(r).source + '.' + startNode(r).table + '.' + startNode(r).name + ' = ' +
           endNode(r).source + '.' + endNode(r).table + '.' + endNode(r).name] AS joins
+"""
+
+LINKED_CYPHER = f"""
+CALL () {{
+  UNWIND range(0, size($direct) - 1) AS i
+  MATCH (a:Metric {{uid: $direct[i], ns: $ns}})-[:JOINABLE_ON]-(m:Metric)
+  WHERE {gate('a')} AND {gate('m')} AND NOT m.uid IN $direct AND NOT m.source IN $sources
+  WITH m, min(i) AS r ORDER BY r, m.id
+  RETURN collect({_metric_map('m')}) AS linked
+}}
+CALL (linked) {{
+  WITH $direct + [x IN linked | x.uid] AS uids
+  MATCH (a:Metric)-[r:JOINABLE_ON]->(b:Metric)
+  WHERE a.uid IN uids AND b.uid IN uids AND {gate('a')} AND {gate('b')}
+    AND EXISTS {{ MATCH (a)-[:HAS_DIMENSION]->(da:Dimension {{name: r.key}}) WHERE {gate('da')} }}
+    AND EXISTS {{ MATCH (b)-[:HAS_DIMENSION]->(dm:Dimension {{name: r.other_key}}) WHERE {gate('dm')} }}
+  RETURN collect({{a: a.uid, b: b.uid, key: r.key, other_key: r.other_key}}) AS links
+}}
+RETURN linked, links
 """
 
 
@@ -366,12 +391,46 @@ def _local_targets(rec: dict) -> dict[str, str]:
     return out
 
 
+def _linked_params(direct: list[dict], scopes, metrics_only, ns) -> dict:
+    return {"direct": [m["uid"] for m in direct], "sources": sorted({m["source"] for m in direct}),
+            **gate_params(scopes, metrics_only, ns)}
+
+
+def _link_finish(direct: list[dict], rec: dict, max_linked: int = MAX_LINKED_METRICS) -> tuple[list[dict], list[dict]]:
+    """Linked metrics in rank order, one per source not yet in the pack, each joined to a direct metric by a visible
+    JOINABLE_ON edge; then the links whose both ends are in the pack, as {a, b, on: "<a dim> = <b dim>"}."""
+    direct_uids = {m["uid"] for m in direct}
+    attached = {e[x] for e in rec["links"] for x, y in (("a", "b"), ("b", "a")) if e[y] in direct_uids}
+    sources, picked = {m["source"] for m in direct}, []
+    for m in rec["linked"]:
+        if len(picked) < max_linked and m["uid"] in attached and m["source"] not in sources:
+            picked.append(m)
+            sources.add(m["source"])
+    metrics = [*direct, *picked]
+    ids = {m["uid"]: m["id"] for m in metrics}
+    links = [{"a": ids[e["a"]], "b": ids[e["b"]], "on": f"{e['key']} = {e['other_key']}"}
+             for e in rec["links"] if e["a"] in ids and e["b"] in ids]
+    return metrics, sorted(links, key=lambda x: (x["a"], x["b"], x["on"]))
+
+
+def prune_links(pack: dict) -> dict:
+    """After budget trimming: drop links whose metrics were trimmed away."""
+    ids = {m["id"] for m in pack["metrics"]}
+    pack["metric_links"] = [x for x in pack["metric_links"] if x["a"] in ids and x["b"] in ids]
+    return pack
+
+
 def expand(driver, hits, scopes, *, metrics_only: bool = False, ns: str | None = None,
            max_metrics: int = KIND_LIMITS["Metric"], max_paths: int = 3,
            timeout_s: float = DEFAULT_TIMEOUT_S) -> dict:
     """Hits (Hit or uid, best first) -> pack sections. Unreadable hits are dropped; every hop is re-gated."""
     (rec,) = run_read(driver, EXPAND_CYPHER, _expand_params(hits, scopes, metrics_only, ns, max_metrics), timeout_s)
     pack, metrics = _expand_finish(rec, metrics_only)
+    lrec = run_read(driver, LINKED_CYPHER, _linked_params(metrics, scopes, metrics_only, ns), timeout_s)[0] \
+        if metrics else {"linked": [], "links": []}
+    linked, links = _link_finish(metrics, lrec)
+    pack["metrics"] += [_metric_entry(m, metrics_only) for m in linked[len(metrics):]]
+    pack["metric_links"] = links
     pairs = [] if metrics_only else _path_pairs(metrics, rec["columns"], rec["concepts"], max_paths)
     rows = run_read(driver, PATH_CYPHER, _paths_params(pairs, scopes, metrics_only, ns), timeout_s) if pairs else []
     pack["join_paths"] = _paths_finish(rows, {m["uid"]: m["id"] for m in metrics}, _local_targets(rec))
@@ -384,6 +443,11 @@ async def aexpand(adriver, hits, scopes, *, metrics_only: bool = False, ns: str 
     (rec,) = await arun_read(adriver, EXPAND_CYPHER, _expand_params(hits, scopes, metrics_only, ns, max_metrics),
                                timeout_s)
     pack, metrics = _expand_finish(rec, metrics_only)
+    lrec = (await arun_read(adriver, LINKED_CYPHER, _linked_params(metrics, scopes, metrics_only, ns), timeout_s))[0] \
+        if metrics else {"linked": [], "links": []}
+    linked, links = _link_finish(metrics, lrec)
+    pack["metrics"] += [_metric_entry(m, metrics_only) for m in linked[len(metrics):]]
+    pack["metric_links"] = links
     pairs = [] if metrics_only else _path_pairs(metrics, rec["columns"], rec["concepts"], max_paths)
     rows = await arun_read(adriver, PATH_CYPHER, _paths_params(pairs, scopes, metrics_only, ns), timeout_s) \
         if pairs else []
@@ -437,7 +501,7 @@ def context_pack(question: str, claims: dict, *, driver, embedder=None, qvec=Non
     vec = qvec if qvec is not None else embedder.embed_query(question)
     hits = search_context(driver, vec, question, scopes, k, metrics_only=metrics_only, ns=ns, timeout_s=timeout_s)
     pack = expand(driver, hits, scopes, metrics_only=metrics_only, ns=ns, timeout_s=timeout_s) if hits else {}
-    return trim_pack(pack, max_tokens)
+    return prune_links(trim_pack(pack, max_tokens))
 
 
 async def acontext_pack(question: str, claims: dict, *, driver, embedder=None, qvec=None, ns: str | None = None,
@@ -450,7 +514,7 @@ async def acontext_pack(question: str, claims: dict, *, driver, embedder=None, q
     hits = await asearch_context(driver, vec, question, scopes, k, metrics_only=metrics_only, ns=ns,
                                  timeout_s=timeout_s)
     pack = await aexpand(driver, hits, scopes, metrics_only=metrics_only, ns=ns, timeout_s=timeout_s) if hits else {}
-    return trim_pack(pack, max_tokens)
+    return prune_links(trim_pack(pack, max_tokens))
 
 
 __all__ = ["GRAPH_ERROR_MESSAGE", "GraphError", "GraphUnavailable", "Hit", "KIND_LIMITS", "PACK_KEYS", "acontext_pack", "aexpand", "asearch_context",

@@ -486,3 +486,56 @@ def test_sync_closed_port_is_graph_unavailable():
         with pytest.raises(GraphUnavailable):
             context_pack("open breaks", claims_for("head_data"), driver=d, qvec=[0.0] * 384, timeout_s=2)
         assert time.perf_counter() - t < 3
+
+
+from prism.graph.retrieval import MAX_LINKED_METRICS, _link_finish, prune_links
+from prism.security.personas import ALL_SOURCES
+
+PF003_Q = "Why did PF003 breach its NAV tolerance on 24 September?"
+
+
+def test_link_finish_picks_one_linked_metric_per_new_source():
+    direct = [{"uid": "u:pe", "id": "position_exceptions", "source": "assetrecon"}]
+    rec = {"linked": [{"uid": "u:ca", "id": "pending_corporate_actions", "source": "refmaster"},
+                      {"uid": "u:dq", "id": "open_dq_exceptions", "source": "refmaster"},
+                      {"uid": "u:ps", "id": "price_suspects", "source": "marketmaster"},
+                      {"uid": "u:x", "id": "orphan", "source": "feedhub"}],
+           "links": [{"a": "u:ca", "b": "u:pe", "key": "security_id", "other_key": "security_id"},
+                     {"a": "u:dq", "b": "u:pe", "key": "record_ref", "other_key": "security_id"},
+                     {"a": "u:pe", "b": "u:ps", "key": "security_id", "other_key": "security_id"},
+                     {"a": "u:ca", "b": "u:ps", "key": "security_id", "other_key": "security_id"}]}
+    metrics, links = _link_finish(direct, rec)
+    assert [m["id"] for m in metrics] == ["position_exceptions", "pending_corporate_actions", "price_suspects"]
+    assert links == [{"a": "pending_corporate_actions", "b": "position_exceptions", "on": "security_id = security_id"},
+                     {"a": "pending_corporate_actions", "b": "price_suspects", "on": "security_id = security_id"},
+                     {"a": "position_exceptions", "b": "price_suspects", "on": "security_id = security_id"}]
+    assert len(_link_finish(direct, rec, max_linked=1)[0]) == 2
+
+
+def test_trimmed_pack_has_no_dangling_links():
+    pack = {"metrics": [{"id": "funds"}], "metric_links": [{"a": "funds", "b": "open_breaks", "on": "x = y"}]}
+    assert prune_links(pack)["metric_links"] == []
+
+
+@pytest.mark.neo4j
+def test_cross_system_question_reaches_all_five_sources(pack):
+    p = pack(PF003_Q, "head_data")
+    ids = [m["id"] for m in p["metrics"]]
+    assert {m["source"] for m in p["metrics"]} == set(ALL_SOURCES), ids
+    assert len(ids) <= KIND_LIMITS["Metric"] + MAX_LINKED_METRICS
+    assert p["metric_links"] and all(x["a"] in ids and x["b"] in ids for x in p["metric_links"])
+
+
+@pytest.mark.neo4j
+def test_metric_links_follow_the_callers_scopes(pack):
+    st = pack("Which pending corporate actions have price spikes?", "steward")
+    source = {m["id"]: m["source"] for m in st["metrics"]}
+    assert st["metric_links"]
+    assert all({source[x["a"]], source[x["b"]]} <= {"refmaster", "marketmaster"} for x in st["metric_links"])
+    bi = pack(PF003_Q, "bi_analyst")
+    dims = {m["id"]: set(m["dimensions"]) for m in bi["metrics"]}
+    assert bi["metric_links"]
+    for x in bi["metric_links"]:
+        da, db = x["on"].split(" = ")
+        assert da in dims[x["a"]] and db in dims[x["b"]]          # never a dimension the caller cannot see
+    assert "matched_by" not in _body(bi)
