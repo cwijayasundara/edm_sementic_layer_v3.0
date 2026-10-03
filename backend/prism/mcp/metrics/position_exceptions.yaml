@@ -1,6 +1,6 @@
 id: position_exceptions
 source: assetrecon
-description: Reconciliation exceptions between internal and custodian positions raised by recon runs, all statuses.
+description: Reconciliation exceptions between internal and custodian positions raised by recon runs, all statuses. cause_code corporate_action marks a corporate action applied by the custodian but not internally.
 type: count
 expr: count(*)
 from: recon_exceptions
@@ -10,12 +10,14 @@ dimensions:
   business_date: business_date
   fund_group: fund_group
   portfolio_id: portfolio_id
+  security_id: security_id
 filters:
   cause_code: {expr: cause_code, type: str}
   fund_group: {expr: fund_group, type: str}
   portfolio_id: {expr: portfolio_id, type: str}
   status: {expr: status, type: str}
   business_date: {expr: business_date, type: date}
+  security_id: {expr: security_id, type: str}
 unit: exceptions
 default_order: metric_desc
-fine_grain_dimensions: [portfolio_id, business_date]  # a portfolio's exceptions on one date can be a single row: never both for metrics-only
+fine_grain_dimensions: [portfolio_id, business_date, security_id]  # a portfolio's exceptions on one date can be a single row: never both for metrics-only

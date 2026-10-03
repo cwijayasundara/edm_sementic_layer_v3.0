@@ -1,0 +1,19 @@
+id: funds
+source: assetrecon
+description: 'Funds (portfolios) with their fund legal entity and the custodian feed source that reports their positions: the bridge from a portfolio''s NAV breaches and position exceptions to RefMaster and CashRecon entities and FeedHub sources.'
+type: count
+expr: count(*)
+from: portfolios
+dimensions:
+  portfolio_id: portfolio_id
+  fund_group: fund_group
+  fund_entity_id: fund_entity_id
+  custodian_source_id: custodian_source_id
+filters:
+  portfolio_id: {expr: portfolio_id, type: str}
+  fund_group: {expr: fund_group, type: str}
+  fund_entity_id: {expr: fund_entity_id, type: str}
+  custodian_source_id: {expr: custodian_source_id, type: str}
+unit: funds
+default_order: metric_desc
+fine_grain_dimensions: [portfolio_id, fund_entity_id, custodian_source_id]  # identifiers: at most one per metrics-only call

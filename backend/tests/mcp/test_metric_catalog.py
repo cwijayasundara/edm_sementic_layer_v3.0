@@ -17,7 +17,7 @@ EXPECTED = {
     "manual_matches", "auto_match_rate", "position_exceptions", "open_position_exceptions", "exception_mv_abs",
     "recon_unmatched_items", "clean_recon_run_rate", "nav_break_bps_max", "nav_breaches_above_5bps",
     "late_feeds", "missing_or_failed_deliveries", "feed_on_time_rate", "avg_feed_latency_min",
-    "open_support_tickets",
+    "open_support_tickets", "funds",
 }
 
 
@@ -106,3 +106,28 @@ def test_overlapping_metrics_say_how_they_relate():
     for mid in ("open_dq_exceptions", "dq_exceptions_total"):
         assert "data-quality rule exceptions (reference-data validation)" in rest[mid].description, mid
     assert "not closed" in rest["open_dq_exceptions"].description
+
+
+def test_incident_hops_through_sql_metrics(seeded):
+    from prism.sim.keys import fund_entity_id
+    from prism.sim.universe import SimConfig, build_universe
+    u = build_universe(SimConfig.small())
+    inc = u.stories.incident
+    fe = fund_entity_id(u.cfg.n_entities, next(k for k, p in enumerate(u.portfolios)
+                                               if p.portfolio_id == inc.anchor_portfolio_id))
+
+    def run(db, metric_id, dims, filters):
+        with scoped(seeded, "head_data", db) as conn:
+            return run_metric(conn, METRICS[metric_id], db_prefix=seeded.db_prefix, as_of=AS_OF, dimensions=dims,
+                              filters=filters)
+
+    assert run("assetrecon", "funds", ["fund_entity_id", "custodian_source_id"],
+               {"portfolio_id": inc.anchor_portfolio_id}) == \
+        [{"fund_entity_id": fe, "custodian_source_id": inc.source_id, "value": 1}]
+    assert run("assetrecon", "position_exceptions", ["security_id"],
+               {"portfolio_id": inc.anchor_portfolio_id, "cause_code": "corporate_action"}) == \
+        [{"security_id": inc.security_id, "value": 2}]
+    assert run("feedhub", "late_feeds", ["source_id"], {"feed_type": "corporate_actions"}) == \
+        [{"source_id": inc.source_id, "value": 2}]
+    breaks = run("cashrecon", "open_breaks", ["legal_entity_id", "bank_source_id"], {"break_type": "cash_in_lieu"})
+    assert [(r["legal_entity_id"], r["value"]) for r in breaks] == [(fe, 1)]
