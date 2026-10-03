@@ -47,8 +47,8 @@ def _registry() -> dict[str, dict]:
     return out
 
 
-def test_one_query_returns_22_metrics_and_5_roles(neo4j_driver, catalog, context_graph):
-    assert len(catalog.metrics) == 22 and set(catalog.roles) == set(PERSONAS)
+def test_one_query_returns_25_metrics_and_5_roles(neo4j_driver, catalog, context_graph):
+    assert len(catalog.metrics) == 25 and set(catalog.roles) == set(PERSONAS)
     assert catalog.version == context_graph.version or catalog.version > context_graph.version
     t = time.perf_counter()
     load_catalog(neo4j_driver, TEST_GRAPH_NS)

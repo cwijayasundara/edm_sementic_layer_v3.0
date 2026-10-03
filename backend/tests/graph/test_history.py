@@ -464,7 +464,11 @@ def test_history_examples_never_add_metrics_and_rank_after_seed_examples(neo4j_d
     assert only["metrics"] == [] and [e["question"] for e in only["examples"]] == [QUESTIONS["feeds"]]
     both = expand(neo4j_driver, [hq, sq], scopes, ns=hist_ns)
     assert [e["question"] for e in both["examples"]] == [seed_text, QUESTIONS["feeds"]]
-    assert [m["id"] for m in both["metrics"]] == ["open_breaks"]       # the seed question's metric only
+    # Linked metrics are allowed: retrieval appends one-hop metric_links neighbours of the direct hit (open_breaks);
+    # history itself adds none.
+    assert both["metrics"][0]["id"] == "open_breaks"
+    for m in both["metrics"][1:]:
+        assert any({x["a"], x["b"]} == {"open_breaks", m["id"]} for x in both["metric_links"])
 
 
 @pytest.mark.neo4j
