@@ -189,14 +189,15 @@
     tool: combine
     args:
       sql: >-
-        SELECT n.portfolio_id, e.security_id, c.issuer_entity_id, f.fund_entity_id, f.custodian_source_id,
+        SELECT n.portfolio_id, n.nav_date, e.security_id, c.issuer_entity_id, f.fund_entity_id, f.custodian_source_id,
         n.value AS nav_breaches, e.value AS position_exceptions, c.value AS pending_corporate_actions,
         p.value AS price_spikes, l.value AS late_corporate_action_feeds, b.value AS cash_in_lieu_breaks
         FROM n JOIN f ON f.portfolio_id = n.portfolio_id JOIN e ON e.portfolio_id = n.portfolio_id
         JOIN c ON c.security_id = e.security_id LEFT JOIN p ON p.security_id = e.security_id
         LEFT JOIN l ON l.source_id = f.custodian_source_id LEFT JOIN b ON b.legal_entity_id = f.fund_entity_id
+        WHERE n.nav_date = DATE '2026-09-24'
       inputs:
-        n: {tool: run_metric, args: {metric_id: nav_breaches_above_5bps, dimensions: [portfolio_id], filters: {portfolio_id: PF003}}}
+        n: {tool: run_metric, args: {metric_id: nav_breaches_above_5bps, dimensions: [portfolio_id, nav_date], filters: {portfolio_id: PF003}}}
         e: {tool: run_metric, args: {metric_id: position_exceptions, dimensions: [portfolio_id, security_id], filters: {portfolio_id: PF003, cause_code: corporate_action}}}
         f: {tool: run_metric, args: {metric_id: funds, dimensions: [portfolio_id, fund_entity_id, custodian_source_id], filters: {portfolio_id: PF003}}}
         c: {tool: run_metric, args: {metric_id: pending_corporate_actions, dimensions: [security_id, issuer_entity_id]}}
@@ -261,7 +262,7 @@
   expect:
     metric_id: nav_breaches_above_5bps
     story: [{contains: {portfolio_id: PF003}}]
-    answer: {all: [PF003], any: [grain, too fine, not available, refused, could not]}
+    answer: {all: [PF003], any: [grain, too fine]}
 - id: incident_issuer_steward_partial
   persona: steward
   question: What is going wrong for LE00364 across our systems?

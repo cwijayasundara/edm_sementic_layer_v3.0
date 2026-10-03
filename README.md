@@ -269,6 +269,7 @@ open DQ exception (RefMaster); the halved price is accepted as a `spike` (Market
 PF025 breach NAV tolerance on 24-25 Sep with `corporate_action` exceptions (AssetRecon); and a cash-in-lieu payment
 lands unmatched on PF003's fund account `CA0063` on 29 Sep (CashRecon). The semantic layer links the systems with
 `JOINABLE_ON` metric edges (`metric_links` in `search_context`); the three `incident_*` golden cases replay it.
+An existing install must run `make reseed && make graph` and then restart the backend; `scripts/start_backend.sh` now reseeds a pre-M9 seed automatically.
 
 ## UI (M5)
 How to start and use it: see "Run the app" above.

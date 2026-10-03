@@ -50,8 +50,8 @@ def _database_exists(conn: psycopg.Connection, name: str) -> bool:
 def is_seeded(settings: Settings) -> bool:
     """True only if seeding completed AND the databases trust the currently configured context key.
 
-    Returns False only on a definite "not seeded" signal (database missing, seed marker absent, key
-    mismatch). Any connection or other database error PROPAGATES: an unreachable or misbehaving server
+    Returns False only on a definite "not seeded" signal (database missing, seed marker absent, pre-M9 seed,
+    key mismatch). Any connection or other database error PROPAGATES: an unreachable or misbehaving server
     must never be mistaken for "not seeded", because callers answer "not seeded" by dropping databases.
     """
     with psycopg.connect(settings.dsn("postgres", admin=True), connect_timeout=3) as conn:
@@ -62,7 +62,8 @@ def is_seeded(settings: Settings) -> bool:
     with psycopg.connect(settings.dsn(APP_DB, admin=True), connect_timeout=3) as conn:
         if conn.execute("SELECT to_regclass('public.seed_info')").fetchone()[0] is None:
             return False
-        if conn.execute("SELECT 1 FROM seed_info").fetchone() is None:
+        row = conn.execute("SELECT incident FROM seed_info").fetchone()
+        if row is None or row[0] is None:   # incident IS NULL: a seed made before M9 (migration 6 adds the column)
             return False
     if not refmaster_exists:
         return False

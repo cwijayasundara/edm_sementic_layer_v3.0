@@ -4,6 +4,7 @@ import psycopg
 import pytest
 from pydantic import SecretStr
 from psycopg import sql
+from psycopg.types.json import Jsonb
 
 from prism.config import Settings
 from prism.db.session import ctx_from_claims, scoped_sync
@@ -39,6 +40,18 @@ def test_is_seeded(seeded):
 
 def test_is_seeded_false_when_ctx_key_changes(seeded):
     assert not is_seeded(seeded.model_copy(update={"ctx_hmac_key": SecretStr("a-different-key-0123456789abcdef0123")}))
+
+
+def test_is_seeded_false_for_a_pre_m9_seed(seeded):
+    from prism.config import APP_DB
+    with psycopg.connect(seeded.dsn(APP_DB, admin=True), autocommit=True) as conn:
+        saved = conn.execute("SELECT incident FROM seed_info").fetchone()[0]
+        try:
+            conn.execute("UPDATE seed_info SET incident = NULL")
+            assert not is_seeded(seeded)
+        finally:
+            conn.execute("UPDATE seed_info SET incident = %s", (Jsonb(saved),))
+    assert is_seeded(seeded)
 
 
 def test_signed_context_grants_rows_and_missing_context_grants_none(seeded):
