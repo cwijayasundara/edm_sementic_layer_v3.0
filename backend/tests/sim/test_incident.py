@@ -3,8 +3,8 @@ import copy
 
 import pytest
 
-from prism.sim.incident import (CA_FEED_TYPE, FAILED_FROM_END, NOISE_CORPORATE_ACTIONS, SPLIT_FROM_END, _next_id,
-                                apply_incident)
+from prism.sim.incident import (CA_FEED_TYPE, FAILED_FROM_END, NOISE_CORPORATE_ACTIONS, NOISE_SPIKES, SPLIT_FROM_END,
+                                _next_id, apply_incident)
 from prism.sim.keys import fund_entity_id
 from prism.sim.model import TableData
 from prism.sim.seed import PROJECTORS
@@ -116,3 +116,40 @@ def test_custodian_corporate_actions_feed_fails_then_is_late(after, universe):
     others = {d: r["status"] for d, r in dl.items()
               if d not in (universe.days[n - FAILED_FROM_END], universe.days[n - SPLIT_FROM_END])}
     assert set(others.values()) == {"on_time"}
+
+
+def test_prices_halve_from_the_split_day(after, before, universe):
+    inc, n = universe.stories.incident, len(universe.days)
+    split_day = universe.days[n - SPLIT_FROM_END]
+    for name in ("golden_prices", "vendor_prices"):
+        old, new = before["marketmaster"][name].dicts(), after["marketmaster"][name].dicts()
+        hits = 0
+        for o, r in zip(old, new):
+            if r["security_id"] == inc.security_id and r["price_date"] >= split_day:
+                assert r["value"] == round(o["value"] / 2, 6)
+                hits += 1
+        assert hits, name
+
+
+def test_the_spike_is_accepted_and_noise_avoids_the_incident(after, before, universe):
+    inc, n = universe.stories.incident, len(universe.days)
+    new = after["marketmaster"]["price_suspects"].dicts()[len(before["marketmaster"]["price_suspects"].rows):]
+    accepted = [r for r in new if r["status"] == "accepted"]
+    assert len(accepted) == 1
+    s = accepted[0]
+    assert (s["security_id"], s["kind"], s["deviation_pct"], s["price_date"]) == \
+        (inc.security_id, "spike", -50.0, universe.days[n - SPLIT_FROM_END])
+    noise = [r for r in new if r is not s]
+    held = {sid for pid in inc.holder_ids for sid, _ in universe.holdings[pid]}
+    assert len(noise) == NOISE_SPIKES
+    assert all(r["kind"] == "spike" and r["status"] == "resolved" and r["security_id"] not in held for r in noise)
+
+
+def test_price_funnel_counts_every_suspect(after, universe):
+    from collections import Counter
+    n = len(universe.days)
+    per_day = Counter(r["price_date"] for r in after["marketmaster"]["price_suspects"].dicts())
+    window = set(universe.days[n - universe.cfg.vendor_window_days:])
+    rows = [r for r in after["marketmaster"]["dq_stage_metrics"].dicts()
+            if r["domain"] == "price" and r["stage"] == "suspect" and r["business_date"] in window]
+    assert rows and all(r["count"] == per_day[r["business_date"]] for r in rows)

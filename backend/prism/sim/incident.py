@@ -12,6 +12,7 @@ order (refmaster, feedhub, marketmaster, assetrecon, cashrecon). It appends rows
 never draws from another projector's stream, so every planted story is unchanged."""
 import itertools
 import random
+from collections import Counter
 from collections.abc import Callable
 from datetime import time, timedelta
 
@@ -19,8 +20,10 @@ from prism.sim.calendar import at
 from prism.sim.ids import make_lei
 from prism.sim.keys import delivery_id, feed_id, fund_cash_account_id, fund_entity_id
 from prism.sim.model import TableData
+from prism.sim.project_marketmaster import STAGES
 from prism.sim.project_refmaster import STEWARDS
-from prism.sim.universe import INCIDENT_SPLIT_FROM_END, LEGAL_SUFFIX, REGION_OF, Incident, Universe
+from prism.sim.universe import (INCIDENT_SPLIT_FROM_END, LEGAL_SUFFIX, REGION_OF, VENDOR_COVERAGE, VENDOR_RANK, VENDORS,
+                                Incident, Universe)
 
 FAILED_FROM_END = 6                    # 23 Sep for the default as-of: the corporate-actions delivery fails
 SPLIT_FROM_END = INCIDENT_SPLIT_FROM_END   # 24 Sep: the split is effective; that day's delivery is late
@@ -145,9 +148,56 @@ def _feedhub(u: Universe, inc: Incident, rng: random.Random, t: dict[str, TableD
                                  latency, count, error, src.source_type, data_type)
 
 
+# ----------------------------------------------------------------------------------------------- marketmaster
+def _golden_vendor(asset_class: str) -> str:
+    return min((v for v, _ in VENDORS if asset_class in VENDOR_COVERAGE[v]), key=VENDOR_RANK.__getitem__)
+
+
+def _marketmaster(u: Universe, inc: Incident, rng: random.Random, t: dict[str, TableData]) -> None:
+    n = len(u.days)
+    split_day = u.days[n - SPLIT_FROM_END]
+    for name in ("golden_prices", "vendor_prices"):   # the market halved; the accepted spike carries it to golden
+        tb = t[name]
+        sid, day, value = (tb.columns.index(c) for c in ("security_id", "price_date", "value"))
+        for k, r in enumerate(tb.rows):
+            if r[sid] == inc.security_id and r[day] >= split_day:
+                _set(tb, k, value=round(r[value] / SPLIT_RATIO, 6))
+    ps = t["price_suspects"]
+    next_ps = _next_id(ps, "suspect_id", "PS", 7)
+    ps.add(next_ps(), inc.security_id, _golden_vendor("Equity"), split_day, "spike", -50.0, "accepted", "Equity")
+    near = {sid for pid in inc.holder_ids for sid, _ in u.holdings[pid]}
+    pool = sorted(s.security_id for s in u.securities if s.security_id not in near and s.status == "active")
+    days = range(n - min(u.cfg.vendor_window_days, n), n - 3)          # older than 3 days: already resolved
+    for sid in rng.sample(pool, min(NOISE_SPIKES, len(pool))):
+        s = u.security_by_id[sid]
+        vid = rng.choice([v for v, _ in VENDORS if s.asset_class in VENDOR_COVERAGE[v]])
+        dev = round(rng.choice((-1, 1)) * rng.uniform(8, 20), 4)
+        ps.add(next_ps(), sid, vid, u.days[rng.choice(days)], "spike", dev, "resolved", s.asset_class)
+    recount_price_stages(u, t)
+
+
+def recount_price_stages(u: Universe, t: dict[str, TableData]) -> None:
+    """Inside the vendor window the price-domain funnel counts that day's suspects (project_marketmaster._dq_metrics):
+    recompute it from the current suspects with the same formula, without drawing."""
+    n = len(u.days)
+    ps = t["price_suspects"]
+    per_day = Counter(r[ps.columns.index("price_date")] for r in ps.rows)
+    dq = t["dq_stage_metrics"]
+    at_key = {(r["business_date"], r["domain"], r["stage"]): k for k, r in enumerate(dq.dicts())}
+    for i in range(n - min(u.cfg.vendor_window_days, n), n):
+        d = u.days[i]
+        acquired = dq.rows[at_key[(d, "price", "acquired")]][dq.columns.index("count")]
+        suspect = per_day[d]
+        validated = acquired - suspect
+        approved = validated + (int(suspect * 0.8) if i < n - 1 else 0)
+        for stage, count in zip(STAGES, (acquired, validated, suspect, approved, approved), strict=True):
+            _set(dq, at_key[(d, "price", stage)], count=count)
+
+
 # ----------------------------------------------------------------------------------------------- entry point
 def apply_incident(u: Universe, tables: dict[str, dict[str, TableData]]) -> None:
     inc = u.stories.incident
     rng = random.Random(u.cfg.seed + 6)
     _refmaster(u, inc, rng, tables["refmaster"])
     _feedhub(u, inc, rng, tables["feedhub"])
+    _marketmaster(u, inc, rng, tables["marketmaster"])
