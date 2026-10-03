@@ -70,13 +70,15 @@ DATA_DICTIONARY = (
 def project_refmaster(u: Universe) -> dict[str, TableData]:
     rng = random.Random(u.cfg.seed + 1)
     t = {
-        "legal_entities": TableData(("entity_id", "lei", "name", "country", "region", "sector", "parent_entity_id", "status")),
+        "legal_entities": TableData(("entity_id", "lei", "name", "country", "region", "sector", "parent_entity_id", "status",
+                                     "entity_type")),
         "securities": TableData(("security_id", "isin", "cusip", "sedol", "ticker", "name", "asset_class", "sub_class",
                                  "ccy", "issuer_entity_id", "country", "status", "valid_from", "valid_to")),
         "products": TableData(("product_id", "name", "product_type")),
         "accounts": TableData(("account_id", "product_id", "name", "account_type", "owner_entity_id", "region",
                                "lifecycle_state")),
-        "corporate_actions": TableData(("ca_id", "security_id", "event_type", "ex_date", "pay_date", "ratio", "status")),
+        "corporate_actions": TableData(("ca_id", "security_id", "event_type", "ex_date", "pay_date", "ratio", "status",
+                                         "issuer_entity_id")),
         "dq_rules": TableData(("rule_id", "domain", "name", "severity")),
         "exceptions": TableData(("exc_id", "rule_id", "domain", "record_ref", "asset_class", "status", "assignee",
                                  "opened_at", "closed_at")),
@@ -84,7 +86,8 @@ def project_refmaster(u: Universe) -> dict[str, TableData]:
         "data_dictionary": TableData(("domain", "attribute", "definition", "owner", "source", "lineage")),
     }
     for e in u.entities:
-        t["legal_entities"].add(e.entity_id, e.lei, e.name, e.country, e.region, e.sector, e.parent_entity_id, e.status)
+        t["legal_entities"].add(e.entity_id, e.lei, e.name, e.country, e.region, e.sector, e.parent_entity_id, e.status,
+                                "sovereign" if e.sector == "Sovereign" else "corporate")
     for s in u.securities:
         t["securities"].add(s.security_id, s.isin, s.cusip, s.sedol, s.ticker, s.name, s.asset_class, s.sub_class,
                             s.ccy, s.issuer_entity_id, s.country, s.status, s.valid_from, None)
@@ -119,7 +122,7 @@ def _corporate_actions(rng: random.Random, u: Universe, table: TableData) -> Non
                  "merger": 1.25, "rights_issue": 0.2, "name_change": None}[event]
         status = "processed" if pay <= u.cfg.as_of else rng.choice(("announced", "confirmed", "confirmed"))
         n += 1
-        table.add(f"CA{n:06d}", s.security_id, event, ex, pay, ratio, status)
+        table.add(f"CA{n:06d}", s.security_id, event, ex, pay, ratio, status, s.issuer_entity_id)
 
 
 def _exceptions(rng: random.Random, u: Universe, table: TableData) -> None:

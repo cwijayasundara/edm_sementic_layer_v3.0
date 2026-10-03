@@ -5,7 +5,9 @@ CREATE TABLE portfolios (
   fund_group text NOT NULL,
   base_ccy char(3) NOT NULL,
   custodian_id text NOT NULL REFERENCES custodians,
-  region text NOT NULL
+  region text NOT NULL,
+  fund_entity_id text NOT NULL,
+  custodian_source_id text NOT NULL
 );
 CREATE TABLE internal_positions (
   portfolio_id text NOT NULL REFERENCES portfolios,

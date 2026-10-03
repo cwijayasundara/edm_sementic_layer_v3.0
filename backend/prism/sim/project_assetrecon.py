@@ -2,7 +2,7 @@
 import random
 from datetime import timedelta
 
-from prism.sim.keys import delivery_id
+from prism.sim.keys import delivery_id, fund_entity_id
 from prism.sim.model import TableData, id_sequence
 from prism.sim.universe import Portfolio, Universe
 
@@ -17,7 +17,8 @@ def project_assetrecon(u: Universe) -> dict[str, TableData]:
     n = len(u.days)
     t = {
         "custodians": TableData(("custodian_id", "name", "feed_source_id")),
-        "portfolios": TableData(("portfolio_id", "name", "fund_group", "base_ccy", "custodian_id", "region")),
+        "portfolios": TableData(("portfolio_id", "name", "fund_group", "base_ccy", "custodian_id", "region",
+                                "fund_entity_id", "custodian_source_id")),
         "internal_positions": TableData(("portfolio_id", "security_id", "book", "qty", "mv", "as_of", "fund_group")),
         "custodian_positions": TableData(("portfolio_id", "security_id", "qty", "mv", "as_of", "delivery_id",
                                           "fund_group")),
@@ -36,9 +37,9 @@ def project_assetrecon(u: Universe) -> dict[str, TableData]:
         custodian_ids[s.source_id] = f"CUS{k + 1:02d}"
         t["custodians"].add(custodian_ids[s.source_id], s.name, s.source_id)
     window = range(n - min(u.cfg.position_window_days, n), n)
-    for p in u.portfolios:
+    for k, p in enumerate(u.portfolios):
         t["portfolios"].add(p.portfolio_id, p.name, p.fund_group, p.base_ccy, custodian_ids[p.custodian_source_id],
-                            p.region)
+                            p.region, fund_entity_id(u.cfg.n_entities, k), p.custodian_source_id)
         _transactions(rng, u, p, t, nid)
         for i in window:
             _positions_day(rng, u, p, i, t, nid)

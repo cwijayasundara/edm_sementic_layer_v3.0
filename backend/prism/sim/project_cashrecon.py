@@ -41,7 +41,7 @@ def project_cashrecon(u: Universe) -> dict[str, TableData]:
         "match_groups": TableData(("match_id", "rule_id", "status", "matched_at", "matched_by", "region")),
         "match_items": TableData(("match_id", "side", "entry_id", "region")),
         "breaks": TableData(("break_id", "account_id", "legal_entity_id", "break_type", "amount", "ccy",
-                             "opened_on", "age_days", "status", "owner", "root_cause", "region")),
+                             "opened_on", "age_days", "status", "owner", "root_cause", "region", "bank_source_id")),
         "break_actions": TableData(("action_id", "break_id", "action", "actor", "ts", "comment", "region")),
     }
     for rule in MATCH_RULES:
@@ -114,7 +114,7 @@ def _add_break(rng, u: Universe, t, nid, a: CashAccount, d: date, break_type: st
     else:
         status, age_days, cause = rng.choice(("open", "open", "investigating")), age, None
     t["breaks"].add(break_id, a.account_id, a.legal_entity_id, break_type, round(amount, 2), a.ccy, d, age_days,
-                    status, owner, cause, a.region)
+                    status, owner, cause, a.region, a.bank_source_id)
     opened = at(d, 20)
     t["break_actions"].add(nid("BA"), break_id, "opened", "system", opened, None, a.region)
     t["break_actions"].add(nid("BA"), break_id, "assigned", "system", opened + timedelta(minutes=5),

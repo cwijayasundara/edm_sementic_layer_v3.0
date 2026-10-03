@@ -6,7 +6,8 @@ CREATE TABLE legal_entities (
   region text NOT NULL,
   sector text NOT NULL,
   parent_entity_id text REFERENCES legal_entities (entity_id),
-  status text NOT NULL
+  status text NOT NULL,
+  entity_type text NOT NULL
 );
 CREATE TABLE securities (
   security_id text PRIMARY KEY,
@@ -42,7 +43,8 @@ CREATE TABLE corporate_actions (
   ex_date date NOT NULL,
   pay_date date NOT NULL,
   ratio numeric(12, 6),
-  status text NOT NULL
+  status text NOT NULL,
+  issuer_entity_id text REFERENCES legal_entities (entity_id)
 );
 CREATE TABLE dq_rules (rule_id text PRIMARY KEY, domain text NOT NULL, name text NOT NULL, severity text NOT NULL);
 CREATE TABLE exceptions (

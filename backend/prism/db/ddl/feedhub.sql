@@ -24,7 +24,8 @@ CREATE TABLE feed_deliveries (
   latency_min int,
   record_count int,
   error_code text,
-  source_type text NOT NULL
+  source_type text NOT NULL,
+  feed_type text NOT NULL
 );
 CREATE INDEX ON feed_deliveries (business_date, status);
 CREATE TABLE support_tickets (

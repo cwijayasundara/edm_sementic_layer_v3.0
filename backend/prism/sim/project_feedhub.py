@@ -24,7 +24,7 @@ def project_feedhub(u: Universe) -> dict[str, TableData]:
         "sources": TableData(("source_id", "name", "source_type", "bic", "country")),
         "feeds": TableData(("feed_id", "source_id", "data_type", "format", "frequency", "expected_by_utc", "source_type")),
         "feed_deliveries": TableData(("delivery_id", "feed_id", "source_id", "business_date", "status", "received_at",
-                                      "latency_min", "record_count", "error_code", "source_type")),
+                                      "latency_min", "record_count", "error_code", "source_type", "feed_type")),
         "support_tickets": TableData(("ticket_id", "feed_id", "source_id", "category", "status", "opened_at",
                                       "closed_at", "source_type")),
     }
@@ -65,7 +65,7 @@ def project_feedhub(u: Universe) -> dict[str, TableData]:
             if status in ("on_time", "late"):
                 count = rng.randint(*RECORD_RANGES[data_type])
             t["feed_deliveries"].add(delivery_id(s.source_id, data_type, d), fid, s.source_id, d, status, received,
-                                     latency, count, error, s.source_type)
+                                     latency, count, error, s.source_type, data_type)
     _tickets(rng, u, feeds, t["support_tickets"])
     return t
 

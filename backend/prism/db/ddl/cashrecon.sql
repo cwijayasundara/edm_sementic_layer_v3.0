@@ -73,7 +73,8 @@ CREATE TABLE breaks (
   status text NOT NULL,
   owner text,
   root_cause text,
-  region text NOT NULL
+  region text NOT NULL,
+  bank_source_id text NOT NULL
 );
 CREATE INDEX ON breaks (status, ccy);
 CREATE TABLE break_actions (
