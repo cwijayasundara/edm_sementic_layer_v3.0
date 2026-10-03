@@ -1,0 +1,1000 @@
+{
+ "full": {
+  "assetrecon.custodian_positions": {
+   "columns": [
+    "portfolio_id",
+    "security_id",
+    "qty",
+    "mv",
+    "as_of",
+    "delivery_id",
+    "fund_group"
+   ],
+   "rows": 32560,
+   "sha256": "e9a6ce93be2afe2464d31d56f612ef53eaa4c4d9f49befcdc0242bb91605641f"
+  },
+  "assetrecon.custodian_transactions": {
+   "columns": [
+    "txn_id",
+    "portfolio_id",
+    "security_id",
+    "trade_date",
+    "settle_date",
+    "txn_type",
+    "qty",
+    "amount",
+    "internal_ref",
+    "fund_group"
+   ],
+   "rows": 3980,
+   "sha256": "3cf20310779f68880a3f7383a212863cf821ad18b3caabaa4d45cb6618809a27"
+  },
+  "assetrecon.custodians": {
+   "columns": [
+    "custodian_id",
+    "name",
+    "feed_source_id"
+   ],
+   "rows": 22,
+   "sha256": "8fbeb73fe85d5d114ab4792da66fe99b53a008238af371d65847b86b48e14793"
+  },
+  "assetrecon.internal_positions": {
+   "columns": [
+    "portfolio_id",
+    "security_id",
+    "book",
+    "qty",
+    "mv",
+    "as_of",
+    "fund_group"
+   ],
+   "rows": 65120,
+   "sha256": "4caeb02b788f86001b0389aa7ff5ce4a1c208d20e91410c17562af0dc78c08bd"
+  },
+  "assetrecon.internal_transactions": {
+   "columns": [
+    "txn_id",
+    "portfolio_id",
+    "security_id",
+    "trade_date",
+    "settle_date",
+    "txn_type",
+    "qty",
+    "amount",
+    "fund_group"
+   ],
+   "rows": 4090,
+   "sha256": "4e71f37827bfa5b1246c392126b798fe056d3b0f73835c3192267c08b8fb4d4e"
+  },
+  "assetrecon.nav_checks": {
+   "columns": [
+    "portfolio_id",
+    "nav_date",
+    "admin_nav",
+    "internal_nav",
+    "diff_bps",
+    "fund_group"
+   ],
+   "rows": 600,
+   "sha256": "36d801c6594b71213366c87cc94630e279cdcdad20f4385e5e6ac14903679972"
+  },
+  "assetrecon.portfolios": {
+   "columns": [
+    "portfolio_id",
+    "name",
+    "fund_group",
+    "base_ccy",
+    "custodian_id",
+    "region"
+   ],
+   "rows": 30,
+   "sha256": "1101ecff4e138e662405eab243e32da1d0f71cfc959307e8703ce41d731e06ca"
+  },
+  "assetrecon.recon_exceptions": {
+   "columns": [
+    "exc_id",
+    "run_id",
+    "portfolio_id",
+    "security_id",
+    "business_date",
+    "diff_qty",
+    "diff_mv",
+    "cause_code",
+    "assigned_to",
+    "status",
+    "sla_due",
+    "fund_group"
+   ],
+   "rows": 380,
+   "sha256": "f0a6ed05d22fc7fc4857f158f709533109180e3fe07f1546116a5fd1bdc6c1bc"
+  },
+  "assetrecon.recon_runs": {
+   "columns": [
+    "run_id",
+    "portfolio_id",
+    "recon_type",
+    "business_date",
+    "matched",
+    "unmatched",
+    "status",
+    "signed_off_by",
+    "fund_group"
+   ],
+   "rows": 2400,
+   "sha256": "5ebafb24f68116fab9edf1cb9660257e43ab70aa145b2c1d10e76475f50f16d2"
+  },
+  "cashrecon.break_actions": {
+   "columns": [
+    "action_id",
+    "break_id",
+    "action",
+    "actor",
+    "ts",
+    "comment",
+    "region"
+   ],
+   "rows": 4538,
+   "sha256": "027a069620cd4b001a9d02336ce52d03b679496742dac63214aed3e9ed683939"
+  },
+  "cashrecon.breaks": {
+   "columns": [
+    "break_id",
+    "account_id",
+    "legal_entity_id",
+    "break_type",
+    "amount",
+    "ccy",
+    "opened_on",
+    "age_days",
+    "status",
+    "owner",
+    "root_cause",
+    "region"
+   ],
+   "rows": 1241,
+   "sha256": "07cdde8ba4d46a83a76c577793632756846c9f6e4ccbb38aa5bce5897e2cfc39"
+  },
+  "cashrecon.ledger_entries": {
+   "columns": [
+    "entry_id",
+    "account_id",
+    "gl_ref",
+    "amount",
+    "dc",
+    "booking_date",
+    "reference",
+    "region"
+   ],
+   "rows": 34736,
+   "sha256": "d6c072efa2fa51b201ff035ad11d6f1b2f81b9c5d349e8344fdae1bdf93dec10"
+  },
+  "cashrecon.match_groups": {
+   "columns": [
+    "match_id",
+    "rule_id",
+    "status",
+    "matched_at",
+    "matched_by",
+    "region"
+   ],
+   "rows": 33890,
+   "sha256": "e8c714603a53d4cf6bc07ae931d3f325a06b54753336391eb2647a3b780f2077"
+  },
+  "cashrecon.match_items": {
+   "columns": [
+    "match_id",
+    "side",
+    "entry_id",
+    "region"
+   ],
+   "rows": 67780,
+   "sha256": "285cfb75ba4a8fb409ef0c52515a6898cb6bcc5d88967cadcf0235c767768d3d"
+  },
+  "cashrecon.match_rules": {
+   "columns": [
+    "rule_id",
+    "name",
+    "cardinality",
+    "tol_amount",
+    "tol_days"
+   ],
+   "rows": 5,
+   "sha256": "f064eec219a8d72f0315f54f3670477ba8b8f535fa1d4f0c551340f9c180834a"
+  },
+  "cashrecon.private.cash_accounts": {
+   "columns": [
+    "account_id",
+    "legal_entity_id",
+    "bank_source_id",
+    "bank_bic",
+    "nostro_no",
+    "ccy",
+    "region"
+   ],
+   "rows": 60,
+   "sha256": "99aa9d9fcf99511cc348273978caaaee535d15944fb2f0d1e1d06f2350593798"
+  },
+  "cashrecon.statement_entries": {
+   "columns": [
+    "entry_id",
+    "stmt_id",
+    "account_id",
+    "value_date",
+    "amount",
+    "dc",
+    "reference",
+    "narrative",
+    "region"
+   ],
+   "rows": 34649,
+   "sha256": "38ac0237113b5e9481deafd32de6dfd93213dbc1e5f8f28df6c89eba8af84447"
+  },
+  "cashrecon.statements": {
+   "columns": [
+    "stmt_id",
+    "account_id",
+    "msg_type",
+    "stmt_no",
+    "value_date",
+    "opening_bal",
+    "closing_bal",
+    "region"
+   ],
+   "rows": 5400,
+   "sha256": "8de68900af27ba6a2c10be1e84b32fd61581d19dac14333ebad9defffa622542"
+  },
+  "feedhub.feed_deliveries": {
+   "columns": [
+    "delivery_id",
+    "feed_id",
+    "source_id",
+    "business_date",
+    "status",
+    "received_at",
+    "latency_min",
+    "record_count",
+    "error_code",
+    "source_type"
+   ],
+   "rows": 5940,
+   "sha256": "3446b2a3c07f202cbe59107a3795779a435031fccc746fd0d87b17dbb5f25c3e"
+  },
+  "feedhub.feeds": {
+   "columns": [
+    "feed_id",
+    "source_id",
+    "data_type",
+    "format",
+    "frequency",
+    "expected_by_utc",
+    "source_type"
+   ],
+   "rows": 66,
+   "sha256": "b8e1152e896c92c1ae03524a126545b47874e6a7157627083a5790d2184801e0"
+  },
+  "feedhub.sources": {
+   "columns": [
+    "source_id",
+    "name",
+    "source_type",
+    "bic",
+    "country"
+   ],
+   "rows": 40,
+   "sha256": "2a5fd7f347a67a8eab04ab92317ced6179d92f79f2dcecf73ba3a85719aa0cc1"
+  },
+  "feedhub.support_tickets": {
+   "columns": [
+    "ticket_id",
+    "feed_id",
+    "source_id",
+    "category",
+    "status",
+    "opened_at",
+    "closed_at",
+    "source_type"
+   ],
+   "rows": 22,
+   "sha256": "41168b6260a58d80e55c6d645b16fc06885d712aff87d2f68c58730d2923bf58"
+  },
+  "marketmaster.dq_stage_metrics": {
+   "columns": [
+    "business_date",
+    "domain",
+    "stage",
+    "count",
+    "sla_met"
+   ],
+   "rows": 1350,
+   "sha256": "c56b5c59f702718a536da792aaf6141fd4ded71ea1e27e4d5e9496ba35e89b31"
+  },
+  "marketmaster.esg_scores": {
+   "columns": [
+    "entity_id",
+    "provider",
+    "as_of",
+    "score"
+   ],
+   "rows": 1544,
+   "sha256": "4c2e08e5cb7c1c4019d76e63b2f3b156f11d2edbf40bac03873f32384a5a4a36"
+  },
+  "marketmaster.golden_prices": {
+   "columns": [
+    "security_id",
+    "price_date",
+    "value",
+    "chosen_vendor_id",
+    "rule",
+    "asset_class"
+   ],
+   "rows": 180000,
+   "sha256": "45550a793fd5da6b499a6c376a12ebead2a3e09e27ab4900acdc34341bf9f3b2"
+  },
+  "marketmaster.instruments": {
+   "columns": [
+    "security_id",
+    "isin",
+    "name",
+    "asset_class",
+    "ccy"
+   ],
+   "rows": 2000,
+   "sha256": "1d85859e51eb9b24dcf87854145d36e366abba048dd2138290f30a428b9d6038"
+  },
+  "marketmaster.price_suspects": {
+   "columns": [
+    "suspect_id",
+    "security_id",
+    "vendor_id",
+    "price_date",
+    "kind",
+    "deviation_pct",
+    "status",
+    "asset_class"
+   ],
+   "rows": 393,
+   "sha256": "ecf58077b357b45e856e58df39970979449db53865c30c35239fc48326fdb332"
+  },
+  "marketmaster.vendor_prices": {
+   "columns": [
+    "security_id",
+    "vendor_id",
+    "price_date",
+    "price_type",
+    "value",
+    "ccy",
+    "received_at",
+    "asset_class"
+   ],
+   "rows": 174501,
+   "sha256": "5c945e5f0c098df0b8703af53b94ab8964cf3e9fd56582b41ae3b006f247a800"
+  },
+  "marketmaster.vendors": {
+   "columns": [
+    "vendor_id",
+    "name",
+    "rank_default"
+   ],
+   "rows": 6,
+   "sha256": "b5da6898b5d55d81cc02bf025ba00f43f56c9f72e18d3f7cfac178d9a9d1fa1b"
+  },
+  "refmaster.accounts": {
+   "columns": [
+    "account_id",
+    "product_id",
+    "name",
+    "account_type",
+    "owner_entity_id",
+    "region",
+    "lifecycle_state"
+   ],
+   "rows": 200,
+   "sha256": "3a90a40f0a9bbef37552b8cc80f89a57128335111e1ca1c2f1ac99140192660a"
+  },
+  "refmaster.change_requests": {
+   "columns": [
+    "change_id",
+    "domain",
+    "record_ref",
+    "maker",
+    "checker",
+    "status",
+    "created_at"
+   ],
+   "rows": 458,
+   "sha256": "5ec8537baa9a4f76c040a34c5fbfcb2bb65f91e7d43948f8fcf083bcbe075ac5"
+  },
+  "refmaster.corporate_actions": {
+   "columns": [
+    "ca_id",
+    "security_id",
+    "event_type",
+    "ex_date",
+    "pay_date",
+    "ratio",
+    "status"
+   ],
+   "rows": 114,
+   "sha256": "5b5779732c0a5d35adaac7899988600f8a3b373900a33e71e34ff8cde2e18010"
+  },
+  "refmaster.data_dictionary": {
+   "columns": [
+    "domain",
+    "attribute",
+    "definition",
+    "owner",
+    "source",
+    "lineage"
+   ],
+   "rows": 20,
+   "sha256": "241793c44a4db3bd76a2c5755d74e00ba251ba1c4fc21ef63060fb3206847019"
+  },
+  "refmaster.dq_rules": {
+   "columns": [
+    "rule_id",
+    "domain",
+    "name",
+    "severity"
+   ],
+   "rows": 12,
+   "sha256": "70a4fa3a15329cb643ce9fdf3e0a70161a4276c6479bf1c565b9bde923062b79"
+  },
+  "refmaster.exceptions": {
+   "columns": [
+    "exc_id",
+    "rule_id",
+    "domain",
+    "record_ref",
+    "asset_class",
+    "status",
+    "assignee",
+    "opened_at",
+    "closed_at"
+   ],
+   "rows": 2150,
+   "sha256": "dec711d02a38259216f6051fa4c6e1c666230217f6f8d911c568e0c35ae86178"
+  },
+  "refmaster.legal_entities": {
+   "columns": [
+    "entity_id",
+    "lei",
+    "name",
+    "country",
+    "region",
+    "sector",
+    "parent_entity_id",
+    "status"
+   ],
+   "rows": 400,
+   "sha256": "2965823901a8a6c7f4e630dd74a345361679a09a2cd32712bb3e0c196c52f8d8"
+  },
+  "refmaster.products": {
+   "columns": [
+    "product_id",
+    "name",
+    "product_type"
+   ],
+   "rows": 8,
+   "sha256": "ebe10bb142b42b237a70f9c5297e5357586770cdf5eb484f0da2aff22ea0e30e"
+  },
+  "refmaster.securities": {
+   "columns": [
+    "security_id",
+    "isin",
+    "cusip",
+    "sedol",
+    "ticker",
+    "name",
+    "asset_class",
+    "sub_class",
+    "ccy",
+    "issuer_entity_id",
+    "country",
+    "status",
+    "valid_from",
+    "valid_to"
+   ],
+   "rows": 2000,
+   "sha256": "2143781da0cb9dc2241ce2462a83429df89f001f4d57833b47b0f421b1cb8159"
+  }
+ },
+ "small": {
+  "assetrecon.custodian_positions": {
+   "columns": [
+    "portfolio_id",
+    "security_id",
+    "qty",
+    "mv",
+    "as_of",
+    "delivery_id",
+    "fund_group"
+   ],
+   "rows": 4060,
+   "sha256": "0767b4e8fa516dc56d47418826364fcc60af5ec50aceef479a25d476f1acf1c3"
+  },
+  "assetrecon.custodian_transactions": {
+   "columns": [
+    "txn_id",
+    "portfolio_id",
+    "security_id",
+    "trade_date",
+    "settle_date",
+    "txn_type",
+    "qty",
+    "amount",
+    "internal_ref",
+    "fund_group"
+   ],
+   "rows": 373,
+   "sha256": "50155164f4997e98a5b6e17ce9fae09e04b64b31a83c3ea7b691ebf5626bc784"
+  },
+  "assetrecon.custodians": {
+   "columns": [
+    "custodian_id",
+    "name",
+    "feed_source_id"
+   ],
+   "rows": 22,
+   "sha256": "8fbeb73fe85d5d114ab4792da66fe99b53a008238af371d65847b86b48e14793"
+  },
+  "assetrecon.internal_positions": {
+   "columns": [
+    "portfolio_id",
+    "security_id",
+    "book",
+    "qty",
+    "mv",
+    "as_of",
+    "fund_group"
+   ],
+   "rows": 8120,
+   "sha256": "8d173459b911536fc264eadd10b5d25c17711ed3bd0b1f92b21a1d05cce920c4"
+  },
+  "assetrecon.internal_transactions": {
+   "columns": [
+    "txn_id",
+    "portfolio_id",
+    "security_id",
+    "trade_date",
+    "settle_date",
+    "txn_type",
+    "qty",
+    "amount",
+    "fund_group"
+   ],
+   "rows": 409,
+   "sha256": "399e833ccc54b440cf5789be981d7f3b0399db49b5ce2831bbc3bec26ae1c1b9"
+  },
+  "assetrecon.nav_checks": {
+   "columns": [
+    "portfolio_id",
+    "nav_date",
+    "admin_nav",
+    "internal_nav",
+    "diff_bps",
+    "fund_group"
+   ],
+   "rows": 240,
+   "sha256": "34b159c74bfefe27e831e169c66eb0a863be5062bce1711a2f32ed50160512db"
+  },
+  "assetrecon.portfolios": {
+   "columns": [
+    "portfolio_id",
+    "name",
+    "fund_group",
+    "base_ccy",
+    "custodian_id",
+    "region"
+   ],
+   "rows": 12,
+   "sha256": "9311946e83b2e4f6e0c808d28e3e9c8c5ce360bd92aae25f865ef286cbcc9780"
+  },
+  "assetrecon.recon_exceptions": {
+   "columns": [
+    "exc_id",
+    "run_id",
+    "portfolio_id",
+    "security_id",
+    "business_date",
+    "diff_qty",
+    "diff_mv",
+    "cause_code",
+    "assigned_to",
+    "status",
+    "sla_due",
+    "fund_group"
+   ],
+   "rows": 60,
+   "sha256": "a02aa8b2aa3aeef6e8d891bd40ddd91ddb10172dda53767a59bbc8ea21ccbad9"
+  },
+  "assetrecon.recon_runs": {
+   "columns": [
+    "run_id",
+    "portfolio_id",
+    "recon_type",
+    "business_date",
+    "matched",
+    "unmatched",
+    "status",
+    "signed_off_by",
+    "fund_group"
+   ],
+   "rows": 960,
+   "sha256": "e8500f6718aef610be76aef9ff033ca283817c40bb326c90cd7d782a30e1aa23"
+  },
+  "cashrecon.break_actions": {
+   "columns": [
+    "action_id",
+    "break_id",
+    "action",
+    "actor",
+    "ts",
+    "comment",
+    "region"
+   ],
+   "rows": 368,
+   "sha256": "02f10a4f8da4ab5e1d0dcdfa2202bed4c7b3ae30e50713d5fbd6aade39515eb1"
+  },
+  "cashrecon.breaks": {
+   "columns": [
+    "break_id",
+    "account_id",
+    "legal_entity_id",
+    "break_type",
+    "amount",
+    "ccy",
+    "opened_on",
+    "age_days",
+    "status",
+    "owner",
+    "root_cause",
+    "region"
+   ],
+   "rows": 116,
+   "sha256": "7606ea66ae1a84989d096e07240ca4c7c5fcba0eeabdcabfcf9fcf33bf8ecc51"
+  },
+  "cashrecon.ledger_entries": {
+   "columns": [
+    "entry_id",
+    "account_id",
+    "gl_ref",
+    "amount",
+    "dc",
+    "booking_date",
+    "reference",
+    "region"
+   ],
+   "rows": 2883,
+   "sha256": "00d316330645b4a7af61bd902c02bad961d17728de536df9718d2c5dc6c8400e"
+  },
+  "cashrecon.match_groups": {
+   "columns": [
+    "match_id",
+    "rule_id",
+    "status",
+    "matched_at",
+    "matched_by",
+    "region"
+   ],
+   "rows": 2812,
+   "sha256": "e3e113b7b868cd826b252c458efe2a75d8750e7cfe883f1dc6f21b15bd27105c"
+  },
+  "cashrecon.match_items": {
+   "columns": [
+    "match_id",
+    "side",
+    "entry_id",
+    "region"
+   ],
+   "rows": 5624,
+   "sha256": "518150a8c367d169b01544324208c9a66425d120a90aa812606aadc574f26394"
+  },
+  "cashrecon.match_rules": {
+   "columns": [
+    "rule_id",
+    "name",
+    "cardinality",
+    "tol_amount",
+    "tol_days"
+   ],
+   "rows": 5,
+   "sha256": "f064eec219a8d72f0315f54f3670477ba8b8f535fa1d4f0c551340f9c180834a"
+  },
+  "cashrecon.private.cash_accounts": {
+   "columns": [
+    "account_id",
+    "legal_entity_id",
+    "bank_source_id",
+    "bank_bic",
+    "nostro_no",
+    "ccy",
+    "region"
+   ],
+   "rows": 18,
+   "sha256": "64702210c6c0c2b5552b2ba5555a7629f57b63e606b6e8a9545e688bb3efe224"
+  },
+  "cashrecon.statement_entries": {
+   "columns": [
+    "entry_id",
+    "stmt_id",
+    "account_id",
+    "value_date",
+    "amount",
+    "dc",
+    "reference",
+    "narrative",
+    "region"
+   ],
+   "rows": 2871,
+   "sha256": "90085e4847b731eaf42d75aaf5bd2f667a6c817da82bd32b38f12559670d6454"
+  },
+  "cashrecon.statements": {
+   "columns": [
+    "stmt_id",
+    "account_id",
+    "msg_type",
+    "stmt_no",
+    "value_date",
+    "opening_bal",
+    "closing_bal",
+    "region"
+   ],
+   "rows": 450,
+   "sha256": "ca888fa4e89a617ed9eae5f0e88d93ad7f31bef6f8b3bd7adbff24b7f387e40c"
+  },
+  "feedhub.feed_deliveries": {
+   "columns": [
+    "delivery_id",
+    "feed_id",
+    "source_id",
+    "business_date",
+    "status",
+    "received_at",
+    "latency_min",
+    "record_count",
+    "error_code",
+    "source_type"
+   ],
+   "rows": 1650,
+   "sha256": "b2c04d9188422c7298f61bd7149f9e98e7908ed1103014fe4c2ecf98fabd386e"
+  },
+  "feedhub.feeds": {
+   "columns": [
+    "feed_id",
+    "source_id",
+    "data_type",
+    "format",
+    "frequency",
+    "expected_by_utc",
+    "source_type"
+   ],
+   "rows": 66,
+   "sha256": "b8e1152e896c92c1ae03524a126545b47874e6a7157627083a5790d2184801e0"
+  },
+  "feedhub.sources": {
+   "columns": [
+    "source_id",
+    "name",
+    "source_type",
+    "bic",
+    "country"
+   ],
+   "rows": 40,
+   "sha256": "94c32c5f43571e04c0e591d146665443a38a4f07dbb322044d0bf9dde9012fe8"
+  },
+  "feedhub.support_tickets": {
+   "columns": [
+    "ticket_id",
+    "feed_id",
+    "source_id",
+    "category",
+    "status",
+    "opened_at",
+    "closed_at",
+    "source_type"
+   ],
+   "rows": 12,
+   "sha256": "d7db646cf112de801391490ac2e601e36157874f79de164a7617560aa3b9cce7"
+  },
+  "marketmaster.dq_stage_metrics": {
+   "columns": [
+    "business_date",
+    "domain",
+    "stage",
+    "count",
+    "sla_met"
+   ],
+   "rows": 375,
+   "sha256": "68f87e4c913a54b45e7eb35944b7f50acf0ff274d689aaffeb803a0e67f799d1"
+  },
+  "marketmaster.esg_scores": {
+   "columns": [
+    "entity_id",
+    "provider",
+    "as_of",
+    "score"
+   ],
+   "rows": 184,
+   "sha256": "1fab8cf65db82a64427b4bc7f4a7acda1ccfce1afaac519456e1b45994db7013"
+  },
+  "marketmaster.golden_prices": {
+   "columns": [
+    "security_id",
+    "price_date",
+    "value",
+    "chosen_vendor_id",
+    "rule",
+    "asset_class"
+   ],
+   "rows": 6000,
+   "sha256": "2eb62b58d83a72b00e1b2eeae2822c6d2386143ee82bc41e24b2a56a6e333336"
+  },
+  "marketmaster.instruments": {
+   "columns": [
+    "security_id",
+    "isin",
+    "name",
+    "asset_class",
+    "ccy"
+   ],
+   "rows": 240,
+   "sha256": "78b4d9778b9ff14c36dcda6beed1da07138bcad4fda2d56066add789988ca7d8"
+  },
+  "marketmaster.price_suspects": {
+   "columns": [
+    "suspect_id",
+    "security_id",
+    "vendor_id",
+    "price_date",
+    "kind",
+    "deviation_pct",
+    "status",
+    "asset_class"
+   ],
+   "rows": 275,
+   "sha256": "f24b3d37f4fe12efb66dd35eb5f5db978f2a9cbf85f6b814f7401ec33ce8e416"
+  },
+  "marketmaster.vendor_prices": {
+   "columns": [
+    "security_id",
+    "vendor_id",
+    "price_date",
+    "price_type",
+    "value",
+    "ccy",
+    "received_at",
+    "asset_class"
+   ],
+   "rows": 20590,
+   "sha256": "044818ab81a60b8befaafa847b66fa2e0e0490e58606cfdd866fe46d3ab0f00f"
+  },
+  "marketmaster.vendors": {
+   "columns": [
+    "vendor_id",
+    "name",
+    "rank_default"
+   ],
+   "rows": 6,
+   "sha256": "b5da6898b5d55d81cc02bf025ba00f43f56c9f72e18d3f7cfac178d9a9d1fa1b"
+  },
+  "refmaster.accounts": {
+   "columns": [
+    "account_id",
+    "product_id",
+    "name",
+    "account_type",
+    "owner_entity_id",
+    "region",
+    "lifecycle_state"
+   ],
+   "rows": 40,
+   "sha256": "7d2bd229530ed8fc02216b1090b767964f34f03bb1359afe99bbcc04b6f0f6d1"
+  },
+  "refmaster.change_requests": {
+   "columns": [
+    "change_id",
+    "domain",
+    "record_ref",
+    "maker",
+    "checker",
+    "status",
+    "created_at"
+   ],
+   "rows": 122,
+   "sha256": "4a1df7a41586746417772abceec37f3e058dc8f8a4741c6fb9814ccfd2f1e742"
+  },
+  "refmaster.corporate_actions": {
+   "columns": [
+    "ca_id",
+    "security_id",
+    "event_type",
+    "ex_date",
+    "pay_date",
+    "ratio",
+    "status"
+   ],
+   "rows": 6,
+   "sha256": "9fab6af5609ceb39f0a57016ade4f2945502971445d07e61cf7ab3ed8f1333e1"
+  },
+  "refmaster.data_dictionary": {
+   "columns": [
+    "domain",
+    "attribute",
+    "definition",
+    "owner",
+    "source",
+    "lineage"
+   ],
+   "rows": 20,
+   "sha256": "241793c44a4db3bd76a2c5755d74e00ba251ba1c4fc21ef63060fb3206847019"
+  },
+  "refmaster.dq_rules": {
+   "columns": [
+    "rule_id",
+    "domain",
+    "name",
+    "severity"
+   ],
+   "rows": 12,
+   "sha256": "70a4fa3a15329cb643ce9fdf3e0a70161a4276c6479bf1c565b9bde923062b79"
+  },
+  "refmaster.exceptions": {
+   "columns": [
+    "exc_id",
+    "rule_id",
+    "domain",
+    "record_ref",
+    "asset_class",
+    "status",
+    "assignee",
+    "opened_at",
+    "closed_at"
+   ],
+   "rows": 70,
+   "sha256": "5f5214b55087b34ced833aaad19e0869c12960bc3a49596ccbc39a7d5bce74ba"
+  },
+  "refmaster.legal_entities": {
+   "columns": [
+    "entity_id",
+    "lei",
+    "name",
+    "country",
+    "region",
+    "sector",
+    "parent_entity_id",
+    "status"
+   ],
+   "rows": 60,
+   "sha256": "49da36013d95cc07e087d629bf1ea0b1ecb1d29ec55822eba55ced68dad09822"
+  },
+  "refmaster.products": {
+   "columns": [
+    "product_id",
+    "name",
+    "product_type"
+   ],
+   "rows": 8,
+   "sha256": "ebe10bb142b42b237a70f9c5297e5357586770cdf5eb484f0da2aff22ea0e30e"
+  },
+  "refmaster.securities": {
+   "columns": [
+    "security_id",
+    "isin",
+    "cusip",
+    "sedol",
+    "ticker",
+    "name",
+    "asset_class",
+    "sub_class",
+    "ccy",
+    "issuer_entity_id",
+    "country",
+    "status",
+    "valid_from",
+    "valid_to"
+   ],
+   "rows": 240,
+   "sha256": "26f717a672bc79a1e37e072e174fe53990406b812cda21cc9cf2c9f9725ea92a"
+  }
+ }
+}
