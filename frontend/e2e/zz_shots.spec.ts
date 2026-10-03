@@ -84,6 +84,23 @@ test("context graph", async ({ page }) => {
   await page.getByRole("dialog").locator("canvas").first().waitFor();
   await page.waitForTimeout(1200);
   await page.screenshot({ path: `${OUT}context-graph.png` });
+  await page.getByRole("button", { name: /^CashRecon/ }).click();
+  await page.waitForTimeout(800);
+  await page.screenshot({ path: `${OUT}context-graph-focus.png` });
+});
+test("context graph on a phone", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await mock(page, PERSONA.head);
+  await login(page, "Head of Data Operations");
+  await page.getByRole("button", { name: "Assistant", exact: true }).click();
+  await page.getByRole("textbox", { name: "Question" }).fill("q");
+  await page.getByRole("button", { name: "Ask" }).click();
+  await page.getByText("EMEA has the most open breaks.").waitFor();
+  await page.getByRole("button", { name: "Close assistant" }).click();
+  await page.getByRole("button", { name: "Context graph" }).first().click();
+  await page.getByRole("dialog").locator("canvas").first().waitFor();
+  await page.waitForTimeout(1200);
+  await page.screenshot({ path: `${OUT}context-graph-phone.png` });
 });
 test("head header", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 500 });

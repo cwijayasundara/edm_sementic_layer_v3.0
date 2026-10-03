@@ -14,29 +14,30 @@ export const NODE_SIZE: Record<LineageKind, number> = {
 };
 
 /** Each kind has its own fill, an icon (24x24 stroke paths) and a short name drawn inside the node; the ring around
- *  the node is the source system's colour. `ink` is the icon and text colour that reads on the fill. */
+ *  the node is the source system's colour, so fills keep clear of the SOURCES colours (graph.test.ts checks it). A
+ *  combined result is Prism's own, so its navy fill matches its ring. `ink` is the icon and text colour that reads on the fill. */
 export type KindStyle = { fill: string; ink: string; short: string; icon: string };
 const WHITE = "#ffffff", INK = "#14213d", HIGHLIGHT = "#e0a526";
 export const KIND_STYLE: Record<LineageKind, KindStyle> = {
-  Metric: { fill: "#3b5bdb", ink: WHITE, short: "Metric",
+  Metric: { fill: "#06d6a0", ink: INK, short: "Metric",
     icon: '<path d="M3 3v18h18"/><path d="M7 16v-4"/><path d="M12 16V8"/><path d="M17 16v-7"/>' },
   Result: { fill: "#14213d", ink: WHITE, short: "Result", icon: '<path d="M18 7V4H6l6 8-6 8h12v-3"/>' },
-  Source: { fill: "#8e5bd0", ink: WHITE, short: "Source",
+  Source: { fill: "#5d4037", ink: WHITE, short: "Source",
     icon: '<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/>' },
-  Table: { fill: "#5f84ad", ink: WHITE, short: "Table",
+  Table: { fill: "#8fb3de", ink: INK, short: "Table",
     icon: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M3 15h18"/><path d="M12 3v18"/>' },
-  Endpoint: { fill: "#2f8f9d", ink: WHITE, short: "Endpoint",
+  Endpoint: { fill: "#b39ddb", ink: INK, short: "Endpoint",
     icon: '<path d="M12 22v-5"/><path d="M9 8V2"/><path d="M15 8V2"/><path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"/>' },
-  Column: { fill: "#7cc0ea", ink: INK, short: "Column",
+  Column: { fill: "#c3dcf2", ink: INK, short: "Column",
     icon: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/><path d="M15 3v18"/>' },
-  Field: { fill: "#8fd3c7", ink: INK, short: "Field",
+  Field: { fill: "#d7f0c8", ink: INK, short: "Field",
     icon: '<path d="M8 3H7a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2 2 2 0 0 1 2 2v5a2 2 0 0 0 2 2h1"/>'
       + '<path d="M16 21h1a2 2 0 0 0 2-2v-5a2 2 0 0 1 2-2 2 2 0 0 1-2-2V5a2 2 0 0 0-2-2h-1"/>' },
-  Dimension: { fill: "#f2bb4b", ink: INK, short: "Dimension",
+  Dimension: { fill: "#f6d860", ink: INK, short: "Dimension",
     icon: '<path d="M12 2 2 7l10 5 10-5-10-5Z"/><path d="m2 17 10 5 10-5"/><path d="m2 12 10 5 10-5"/>' },
-  BusinessTerm: { fill: "#3f7d5c", ink: WHITE, short: "Term",
+  BusinessTerm: { fill: "#6a994e", ink: WHITE, short: "Term",
     icon: '<path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/>' },
-  Question: { fill: "#e07a5f", ink: WHITE, short: "Question",
+  Question: { fill: "#f4a6a6", ink: INK, short: "Question",
     icon: '<path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><path d="M12 17h.01"/>' },
 };
 

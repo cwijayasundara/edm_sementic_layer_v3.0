@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { DENSE_NODES, EDGE_LABEL_MAX, KIND_RANK, KIND_STYLE, NODE_SIZE, layeredPositions, nodeScale, PRISM_ORIGIN, edgeText, nodeColor, nodeOrigin, nodeSvg, nodeSymbol,
   originText, shortLabel, sourcesUsed, toGraphOption } from "@/lib/graph";
 import { Lineage } from "@/lib/schemas";
+import { SOURCES } from "@/lib/sources";
 
 const g = Lineage.parse({
   nodes: [
@@ -77,6 +78,15 @@ describe("toGraphOption", () => {
     expect(svg).toContain(">Table</text>");
     const fills = new Set(Object.values(KIND_STYLE).map((k) => k.fill));
     expect(fills.size).toBe(Object.keys(KIND_STYLE).length);
+  });
+
+  it("no kind fill can be mistaken for a source system's ring or legend colour", () => {
+    const rgb = (h: string) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+    const dist = (a: string, b: string) => Math.hypot(...rgb(a).map((v, i) => v - rgb(b)[i]));
+    for (const [kind, { fill }] of Object.entries(KIND_STYLE)) {
+      if (kind === "Result") continue; // Prism's own: navy fill inside a navy ring
+      for (const s of SOURCES) expect(dist(fill, s.hex), `${kind} vs ${s.name}`).toBeGreaterThan(60);
+    }
   });
 });
 
