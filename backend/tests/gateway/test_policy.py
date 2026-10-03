@@ -31,8 +31,8 @@ def _code(fn, *a, **k) -> GatewayError:
     return info.value
 
 
-def test_matrix_covers_5_personas_x_22_metrics(fake_catalog):
-    assert len(fake_catalog.metrics) == 22 and len(PERSONAS) == 5
+def test_matrix_covers_5_personas_x_25_metrics(fake_catalog):
+    assert len(fake_catalog.metrics) == 25 and len(PERSONAS) == 5
 
 
 @pytest.mark.parametrize("persona", sorted(PERSONAS))
@@ -61,8 +61,8 @@ def test_policy_matrix(policy, fake_catalog, persona):
 
 def test_matrix_is_not_trivial(fake_catalog):
     allowed = {p: sum(_permitted(p, m) for m in fake_catalog.metrics.values()) for p in PERSONAS}
-    assert allowed["head_data"] == allowed["bi_analyst"] == 22
-    assert 0 < allowed["steward"] < 22 and 0 < allowed["cash_ops_emea"] < 22 and 0 < allowed["invest_ops_growth"] < 22
+    assert allowed["head_data"] == allowed["bi_analyst"] == 25
+    assert 0 < allowed["steward"] < 25 and 0 < allowed["cash_ops_emea"] < 25 and 0 < allowed["invest_ops_growth"] < 25
 
 
 def test_unreadable_metric_answers_exactly_like_an_unknown_one(policy):
@@ -210,7 +210,7 @@ def test_every_entity_by_date_metric_is_grain_protected():
             "nav_breaches_above_5bps", "nav_break_bps_max", "price_conflicts"} <= set(FINE)
 
 
-@pytest.mark.parametrize("metric", sorted(FINE))
+@pytest.mark.parametrize("metric", sorted(mid for mid, fg in FINE.items() if len(fg) >= 2))
 def test_grain_too_fine_for_metrics_only_on_every_fine_metric(policy, fake_catalog, metric):
     m = fake_catalog.metrics[metric]
     a, b = m.fine_grain[0], m.fine_grain[1]
@@ -226,6 +226,12 @@ def test_grain_too_fine_for_metrics_only_on_every_fine_metric(policy, fake_catal
         policy.check_metric(head, metric, [*req, *dims], filters)
     policy.check_metric(bi, metric, [*req, a], {})
     policy.check_metric(bi, metric, [*req, b], {})
+
+
+@pytest.mark.parametrize("metric", sorted(mid for mid, fg in FINE.items() if len(fg) == 1))
+def test_single_fine_dimension_is_allowed_for_metrics_only(policy, fake_catalog, metric):
+    m = fake_catalog.metrics[metric]
+    policy.check_metric(claims_for("bi_analyst"), metric, [*m.required, m.fine_grain[0]], {})
 
 
 def test_coarser_grain_allowed_for_metrics_only(policy):
