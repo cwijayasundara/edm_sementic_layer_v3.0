@@ -1,0 +1,1141 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Prism Architecture</title>
+<meta name="description" content="How Prism lets agents answer business questions across five different data platforms through a graph semantic layer, a single semantic gateway and a supervisor/sub-agent agentic system.">
+<style>
+:root {
+  --bg: #f6f7fb; --surface: #ffffff; --surface-2: #eef1f7; --ink: #141a2b; --muted: #5a6478; --line: #d5dbe7;
+  --accent: #23407a; --accent-soft: #e3e9f6; --accent-2: #b3263e; --ok: #1f8a5b; --warn: #b26b00;
+  --code-bg: #f0f2f8;
+  --l-ui: #e8eefc; --l-agent: #efe8fb; --l-gw: #e6f4ef; --l-graph: #fdf1e2; --l-src: #f3f4f7; --l-db: #e9f0f7;
+  --s-ref: #2f63c9; --s-mkt: #7a45c4; --s-cash: #16865f; --s-asset: #c26a0e; --s-feed: #b8355f;
+  --shadow: 0 1px 2px rgba(20,26,43,.06), 0 4px 16px rgba(20,26,43,.05);
+}
+:root[data-theme="dark"] {
+  --bg: #0f1320; --surface: #171c2c; --surface-2: #1e2438; --ink: #e7eaf3; --muted: #9aa3b8; --line: #2e3650;
+  --accent: #8fb0f0; --accent-soft: #1f2a46; --accent-2: #f07a8d; --ok: #4cc493; --warn: #e3a84a;
+  --code-bg: #1b2133;
+  --l-ui: #1c2642; --l-agent: #261f3d; --l-gw: #17302a; --l-graph: #33281a; --l-src: #1d2232; --l-db: #182536;
+  --s-ref: #6c9bf2; --s-mkt: #b18af0; --s-cash: #4cc493; --s-asset: #eba24f; --s-feed: #ef7fa2;
+  --shadow: 0 1px 2px rgba(0,0,0,.3), 0 4px 16px rgba(0,0,0,.25);
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 16px; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15.5px/1.6 ui-sans-serif, -apple-system, "Segoe UI", Inter, Roboto, sans-serif; -webkit-font-smoothing: antialiased; }
+code, pre, .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: .88em; }
+code { background: var(--code-bg); padding: .08em .35em; border-radius: 4px; }
+pre { background: var(--code-bg); padding: 14px 16px; border-radius: 10px; overflow-x: auto; line-height: 1.5; border: 1px solid var(--line); }
+pre code { background: none; padding: 0; }
+a { color: var(--accent); }
+.layout { display: grid; grid-template-columns: 270px minmax(0, 1fr); max-width: 1320px; margin: 0 auto; }
+nav.toc { position: sticky; top: 0; height: 100vh; overflow-y: auto; padding: 28px 18px 28px 24px; border-right: 1px solid var(--line); }
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 18px; margin-bottom: 4px; }
+.brand svg { width: 26px; height: 26px; }
+.brand-sub { color: var(--muted); font-size: 12.5px; margin-bottom: 18px; }
+nav.toc ol { list-style: none; padding: 0; margin: 0; counter-reset: s; }
+nav.toc li { margin: 1px 0; }
+nav.toc a { display: block; padding: 5px 10px; border-radius: 7px; color: var(--muted); text-decoration: none; font-size: 13.5px; border-left: 2px solid transparent; }
+nav.toc a:hover { background: var(--surface-2); color: var(--ink); }
+nav.toc a.active { color: var(--accent); background: var(--accent-soft); border-left-color: var(--accent); font-weight: 600; }
+nav.toc .sub a { padding-left: 24px; font-size: 12.5px; }
+.theme-btn { margin-top: 18px; width: 100%; border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 8px; padding: 7px 10px; font: inherit; font-size: 13px; cursor: pointer; }
+main { padding: 36px 48px 80px; min-width: 0; }
+section { margin-bottom: 56px; }
+h1 { font-size: 34px; line-height: 1.2; margin: 0 0 10px; letter-spacing: -.01em; }
+h2 { font-size: 25px; margin: 0 0 6px; letter-spacing: -.005em; display: flex; align-items: baseline; gap: 10px; }
+h2 .num { color: var(--accent-2); font-size: 15px; font-weight: 700; font-family: ui-monospace, Menlo, monospace; }
+h3 { font-size: 18px; margin: 30px 0 8px; }
+.lede { color: var(--muted); font-size: 17px; max-width: 78ch; }
+.kicker { color: var(--muted); margin: 0 0 18px; }
+p, li { max-width: 82ch; }
+.hero { background: linear-gradient(135deg, var(--accent-soft), var(--surface)); border: 1px solid var(--line); border-radius: 16px; padding: 28px 30px; margin-bottom: 40px; box-shadow: var(--shadow); }
+.hero .tag { display: inline-block; font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--accent-2); margin-bottom: 8px; }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-top: 22px; }
+.stat { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
+.stat b { display: block; font-size: 24px; color: var(--accent); line-height: 1.2; }
+.stat span { color: var(--muted); font-size: 12.5px; }
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; margin: 16px 0; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; box-shadow: var(--shadow); }
+.card h4 { margin: 0 0 6px; font-size: 15px; }
+.card p { margin: 0; color: var(--muted); font-size: 14px; }
+.card .ic { font-size: 12px; font-weight: 700; color: var(--accent-2); text-transform: uppercase; letter-spacing: .05em; }
+figure { margin: 18px 0 26px; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 16px; box-shadow: var(--shadow); }
+figure .fig { overflow-x: auto; }
+figure svg.d { display: block; width: 100%; height: auto; min-width: 760px; }
+figcaption { color: var(--muted); font-size: 13px; margin-top: 10px; }
+table { border-collapse: collapse; width: 100%; font-size: 14px; background: var(--surface); border-radius: 10px; overflow: hidden; }
+.tw { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; margin: 14px 0 22px; }
+th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { background: var(--surface-2); font-weight: 600; font-size: 13px; }
+tr:last-child td { border-bottom: none; }
+.note { border-left: 3px solid var(--accent); background: var(--accent-soft); padding: 12px 16px; border-radius: 0 10px 10px 0; margin: 16px 0; }
+.note.warn { border-left-color: var(--warn); background: color-mix(in srgb, var(--warn) 10%, var(--surface)); }
+.pill { display: inline-block; font-size: 11.5px; font-weight: 600; padding: 2px 8px; border-radius: 99px; background: var(--surface-2); border: 1px solid var(--line); color: var(--muted); }
+.src { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+.steps { counter-reset: st; list-style: none; padding: 0; }
+.steps li { counter-increment: st; position: relative; padding-left: 38px; margin: 10px 0; }
+.steps li::before { content: counter(st); position: absolute; left: 0; top: 1px; width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: var(--surface); font-size: 13px; font-weight: 700; display: grid; place-items: center; }
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.mobile-toc { display: none; }
+
+/* SVG diagram classes */
+svg.d text { fill: var(--ink); font: 13px ui-sans-serif, -apple-system, "Segoe UI", Inter, sans-serif; }
+svg.d .sm { font-size: 11.5px; fill: var(--muted); }
+svg.d .xs { font-size: 10.5px; fill: var(--muted); }
+svg.d .b { font-weight: 700; }
+svg.d .h { font-weight: 700; font-size: 14px; }
+svg.d .mono { font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; }
+svg.d .box { fill: var(--surface); stroke: var(--line); stroke-width: 1.2; }
+svg.d .lay-ui { fill: var(--l-ui); stroke: var(--line); }
+svg.d .lay-agent { fill: var(--l-agent); stroke: var(--line); }
+svg.d .lay-gw { fill: var(--l-gw); stroke: var(--line); }
+svg.d .lay-graph { fill: var(--l-graph); stroke: var(--line); }
+svg.d .lay-src { fill: var(--l-src); stroke: var(--line); }
+svg.d .lay-db { fill: var(--l-db); stroke: var(--line); }
+svg.d .ln { stroke: var(--muted); stroke-width: 1.4; fill: none; }
+svg.d .ln-acc { stroke: var(--accent); stroke-width: 1.8; fill: none; }
+svg.d .ln-red { stroke: var(--accent-2); stroke-width: 1.8; fill: none; }
+svg.d .dash { stroke-dasharray: 5 4; }
+svg.d .life { stroke: var(--line); stroke-width: 1.2; stroke-dasharray: 3 4; }
+svg.d .acc { fill: var(--accent); }
+svg.d .red { fill: var(--accent-2); }
+svg.d .sref { stroke: var(--s-ref); } svg.d .smkt { stroke: var(--s-mkt); } svg.d .scash { stroke: var(--s-cash); }
+svg.d .sasset { stroke: var(--s-asset); } svg.d .sfeed { stroke: var(--s-feed); }
+svg.d .fref { fill: var(--s-ref); } svg.d .fmkt { fill: var(--s-mkt); } svg.d .fcash { fill: var(--s-cash); }
+svg.d .fasset { fill: var(--s-asset); } svg.d .ffeed { fill: var(--s-feed); }
+svg.d .chip { fill: var(--surface-2); stroke: var(--line); }
+svg.d .tw { fill: var(--surface); }
+svg.ah-defs .ah { fill: var(--muted); } svg.ah-defs .ah-acc { fill: var(--accent); } svg.ah-defs .ah-red { fill: var(--accent-2); }
+
+@media (max-width: 900px) {
+  .layout { grid-template-columns: minmax(0, 1fr); }
+  nav.toc { display: none; }
+  .mobile-toc { display: block; position: sticky; top: 0; z-index: 5; background: var(--bg); border-bottom: 1px solid var(--line); padding: 10px 16px; }
+  .mobile-toc details summary { cursor: pointer; font-weight: 600; }
+  .mobile-toc ol { list-style: none; padding: 6px 0 4px; margin: 0; max-height: 60vh; overflow-y: auto; }
+  .mobile-toc a { display: block; padding: 6px 4px; color: var(--ink); text-decoration: none; font-size: 14px; }
+  main { padding: 22px 16px 60px; }
+  h1 { font-size: 27px; }
+  h2 { font-size: 21px; }
+  .two { grid-template-columns: 1fr; }
+  .hero { padding: 20px 18px; }
+  figure { padding: 10px; }
+}
+</style>
+</head>
+<body>
+<!-- shared arrow markers -->
+<svg class="ah-defs" width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0 0 L10 5 L0 10 z"/></marker>
+    <marker id="ah-acc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah-acc" d="M0 0 L10 5 L0 10 z"/></marker>
+    <marker id="ah-red" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah-red" d="M0 0 L10 5 L0 10 z"/></marker>
+  </defs>
+</svg>
+
+<div class="mobile-toc">
+  <details>
+    <summary>Contents</summary>
+    <ol id="mtoc"></ol>
+  </details>
+</div>
+
+<div class="layout">
+<nav class="toc" aria-label="Contents">
+  <div class="brand">
+    <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 3 L29 27 H3 Z" fill="none" stroke="var(--accent)" stroke-width="2.4" stroke-linejoin="round"/><path d="M2 14 L16 16" stroke="var(--muted)" stroke-width="1.6"/><path d="M16 16 L30 11" stroke="var(--s-ref)" stroke-width="1.6"/><path d="M16 16 L30 15" stroke="var(--s-cash)" stroke-width="1.6"/><path d="M16 16 L30 19" stroke="var(--s-asset)" stroke-width="1.6"/><path d="M16 16 L30 23" stroke="var(--s-feed)" stroke-width="1.6"/></svg>
+    Prism
+  </div>
+  <div class="brand-sub">Architecture &amp; design · as built, Oct 2026</div>
+  <ol id="toc">
+    <li><a href="#overview">Overview</a></li>
+    <li><a href="#problem">1 · The business problem</a></li>
+    <li><a href="#solution">2 · The solution in one picture</a></li>
+    <li><a href="#principles">3 · Design principles</a></li>
+    <li><a href="#sources">4 · Data sources &amp; uniform contract</a></li>
+    <li><a href="#semantic">5 · Semantic layer</a></li>
+    <li class="sub"><a href="#graph-model">Graph model</a></li>
+    <li class="sub"><a href="#knowledge">Three knowledge layers</a></li>
+    <li class="sub"><a href="#retrieval">search_context pipeline</a></li>
+    <li><a href="#gateway">6 · Semantic gateway</a></li>
+    <li><a href="#agents">7 · Agentic system</a></li>
+    <li class="sub"><a href="#deep-agent">Deep-agent pattern</a></li>
+    <li class="sub"><a href="#chat-turn">One /chat turn</a></li>
+    <li class="sub"><a href="#cross-system">Cross-system investigation</a></li>
+    <li><a href="#security">8 · Security: RBAC + RLS</a></li>
+    <li><a href="#learning">9 · Learning loop &amp; traces</a></li>
+    <li><a href="#incident">10 · Worked example: incident</a></li>
+    <li><a href="#ui">11 · UI &amp; provenance</a></li>
+    <li><a href="#evals">12 · Evaluation</a></li>
+    <li><a href="#runtime">13 · Runtime &amp; runbook</a></li>
+    <li><a href="#asbuilt">14 · As built vs. design, roadmap</a></li>
+  </ol>
+  <button class="theme-btn" id="themeBtn" type="button">Switch to dark / light</button>
+</nav>
+
+<main>
+
+<!-- ============ OVERVIEW ============ -->
+<section id="overview">
+  <div class="hero">
+    <span class="tag">Agentic data intelligence</span>
+    <h1>Ask the data platform a question, get a dashboard back</h1>
+    <p class="lede">Prism puts a team of AI agents on top of five different enterprise data platforms (two REST-based
+    data-management systems and three Postgres stores) without letting the agents near the data directly. A
+    <b>graph semantic layer</b> tells the agents what the business means and where it lives; a single <b>semantic
+    gateway</b> is the only door to the data and enforces every entitlement; a <b>supervisor / sub-agent system</b>
+    plans, fans out, joins and explains the results.</p>
+    <div class="stats">
+      <div class="stat"><b>5</b><span>simulated data platforms, 2 REST + 3 SQL</span></div>
+      <div class="stat"><b>1</b><span>agent-facing door to data (Semantic Gateway MCP)</span></div>
+      <div class="stat"><b>25</b><span>governed metrics in the catalog</span></div>
+      <div class="stat"><b>59</b><span>business glossary terms in 6 glossaries</span></div>
+      <div class="stat"><b>5</b><span>personas with different datasets and row scopes</span></div>
+      <div class="stat"><b>30 + 15</b><span>golden and red-team eval questions</span></div>
+    </div>
+  </div>
+  <p>This document explains the problem, the architecture that solves it, and the reasons behind each design choice.
+  It is written from the code as it stands (<code>backend/prism</code>, <code>frontend</code>) and the design specs in
+  <code>docs/superpowers/specs</code>. Where the build differs from the original proposal, <a href="#asbuilt">section 14</a>
+  says so.</p>
+</section>
+
+<!-- ============ 1 PROBLEM ============ -->
+<section id="problem">
+  <h2><span class="num">01</span>The business problem</h2>
+  <p class="kicker">Building agents on top of many different data sources</p>
+  <p>An operations organisation runs on several specialised platforms. Each has its own storage, interface,
+  vocabulary and access rules. The questions people actually ask cut across them:</p>
+  <ul>
+    <li>“Which legal entity has the most USD breaks open longer than 5 days?” <span class="pill">one source, governed metric</span></li>
+    <li>“Which vendor drives most corporate-bond price conflicts this week?” <span class="pill">REST source</span></li>
+    <li>“Why did fund PF003 breach its NAV tolerance on 24 September?” <span class="pill">all five sources</span></li>
+  </ul>
+
+  <figure>
+    <div class="fig">
+    <svg class="d" viewBox="0 0 1000 330" role="img" aria-labelledby="p-t">
+      <title id="p-t">Five siloed data platforms with different interfaces, and personas asking cross-system questions</title>
+      <!-- personas -->
+      <rect x="20" y="20" width="960" height="66" rx="12" class="lay-ui"/>
+      <text x="40" y="46" class="h">People asking questions in business language</text>
+      <text x="40" y="68" class="sm">Steward · Cash Ops (EMEA) · Investment Ops (Growth funds) · BI Analyst (metrics only) · Head of Data</text>
+      <!-- question mark band -->
+      <rect x="20" y="112" width="960" height="54" rx="12" fill="none" class="ln-red dash"/>
+      <text x="500" y="135" text-anchor="middle" class="b" style="fill:var(--accent-2)">The gap</text>
+      <text x="500" y="155" text-anchor="middle" class="sm">different vocabularies · REST vs SQL · no shared keys documented · per-user entitlements · cross-system causes</text>
+      <!-- sources -->
+      <g>
+        <rect x="20" y="192" width="180" height="118" rx="10" class="box"/><rect x="20" y="192" width="180" height="6" rx="3" class="fref"/>
+        <text x="34" y="222" class="b">RefMaster</text><text x="34" y="242" class="sm">Reference-data EDM</text>
+        <text x="34" y="262" class="sm">securities, entities,</text><text x="34" y="278" class="sm">corporate actions, DQ</text>
+        <text x="34" y="300" class="mono" style="fill:var(--s-ref)">REST API</text>
+      </g>
+      <g>
+        <rect x="215" y="192" width="180" height="118" rx="10" class="box"/><rect x="215" y="192" width="180" height="6" rx="3" class="fmkt"/>
+        <text x="229" y="222" class="b">MarketMaster</text><text x="229" y="242" class="sm">Market-data EDM</text>
+        <text x="229" y="262" class="sm">vendor prices, golden</text><text x="229" y="278" class="sm">price, suspects, DQ</text>
+        <text x="229" y="300" class="mono" style="fill:var(--s-mkt)">REST API</text>
+      </g>
+      <g>
+        <rect x="410" y="192" width="180" height="118" rx="10" class="box"/><rect x="410" y="192" width="180" height="6" rx="3" class="fcash"/>
+        <text x="424" y="222" class="b">CashRecon</text><text x="424" y="242" class="sm">Cash reconciliation</text>
+        <text x="424" y="262" class="sm">nostros, statements,</text><text x="424" y="278" class="sm">matches, breaks</text>
+        <text x="424" y="300" class="mono" style="fill:var(--s-cash)">Postgres</text>
+      </g>
+      <g>
+        <rect x="605" y="192" width="180" height="118" rx="10" class="box"/><rect x="605" y="192" width="180" height="6" rx="3" class="fasset"/>
+        <text x="619" y="222" class="b">AssetRecon</text><text x="619" y="242" class="sm">Position reconciliation</text>
+        <text x="619" y="262" class="sm">positions, recon runs,</text><text x="619" y="278" class="sm">exceptions, NAV checks</text>
+        <text x="619" y="300" class="mono" style="fill:var(--s-asset)">Postgres</text>
+      </g>
+      <g>
+        <rect x="800" y="192" width="180" height="118" rx="10" class="box"/><rect x="800" y="192" width="180" height="6" rx="3" class="ffeed"/>
+        <text x="814" y="222" class="b">FeedHub</text><text x="814" y="242" class="sm">Feed aggregator</text>
+        <text x="814" y="262" class="sm">sources, feeds,</text><text x="814" y="278" class="sm">deliveries, tickets</text>
+        <text x="814" y="300" class="mono" style="fill:var(--s-feed)">Postgres</text>
+      </g>
+    </svg>
+    </div>
+    <figcaption>Five simulated platforms (generic archetypes, fictional data). Each speaks a different interface and vocabulary.</figcaption>
+  </figure>
+
+  <h3>Why “just give an LLM the databases” fails</h3>
+  <div class="cards">
+    <div class="card"><div class="ic">Accuracy</div><h4>Plausible but wrong</h4><p>Text-to-SQL over raw schemas guesses at meaning (“aged break”, “late feed”, “golden price”) and joins. It fails quietly with believable numbers.</p></div>
+    <div class="card"><div class="ic">Heterogeneity</div><h4>REST and SQL differ</h4><p>Two platforms are reachable only through domain REST APIs; three are relational stores. Agents must work over both uniformly.</p></div>
+    <div class="card"><div class="ic">Security</div><h4>Entitlements per person</h4><p>Each persona sees different datasets and rows (region, fund group, feed type), and one is metrics-only. The model must never be the security boundary.</p></div>
+    <div class="card"><div class="ic">Cost &amp; latency</div><h4>Token budgets</h4><p>Schema dumps (20k+ tokens) and raw rows in the context are slow and expensive. Deterministic work (KPIs, maths, joins) should cost no tokens.</p></div>
+    <div class="card"><div class="ic">Trust</div><h4>Show your working</h4><p>Users need provenance: which metric, which source, which rows, which steps, so they can confirm an answer.</p></div>
+    <div class="card"><div class="ic">Cross-system</div><h4>Causes span systems</h4><p>Root causes run through several platforms (a feed failure → missed corporate action → price spike → NAV breach → cash break). Keys change at each hop.</p></div>
+  </div>
+
+  <h3>Success criteria</h3>
+  <ol>
+    <li>A user signs in as a persona, sees role-appropriate KPIs, asks a question and gets a correct chart, a 2–3 sentence summary and a provenance link.</li>
+    <li>The same question asked by two personas returns different, correctly scoped results; a forbidden request returns a plain “not entitled”, never leaked data.</li>
+    <li>Token use is measured per question, kept low by graph retrieval, prompt caching and the no-raw-rows rule.</li>
+  </ol>
+</section>
+
+<!-- ============ 2 SOLUTION ============ -->
+<section id="solution">
+  <h2><span class="num">02</span>The solution in one picture</h2>
+  <p class="kicker">Map (graph) · guide (gateway) · territory (sources) · analysts (agents)</p>
+  <p>The core idea: <b>the context graph is the map, the source MCP servers are the territory, and the semantic gateway
+  is the guide that reads the map and makes the trip on the user's behalf.</b> Agents speak business language to one
+  gateway. They never see a database credential, a source token or a full result set.</p>
+
+  <figure>
+    <div class="fig">
+    <svg class="d" viewBox="0 0 1000 800" role="img" aria-labelledby="a-t">
+      <title id="a-t">Layered architecture: UI, agent service, semantic gateway with Neo4j context graph, five source MCP servers, REST APIs and Postgres</title>
+      <!-- UI -->
+      <rect x="20" y="16" width="960" height="78" rx="12" class="lay-ui"/>
+      <text x="40" y="42" class="h">Next.js UI  :3000</text>
+      <text x="40" y="64" class="sm">Persona login · KPI strip (deterministic) · canvas of generated widgets · collapsible assistant</text>
+      <text x="40" y="82" class="sm">Provenance drawer (query · source rows) · Context graph dialog · “How I got this” reasoning timeline · saved dashboards</text>
+
+      <path d="M500 94 V128" class="ln-acc" marker-end="url(#ah-acc)"/>
+      <text x="512" y="116" class="xs">SSE / REST · persona JWT (aud gateway-mcp)</text>
+
+      <!-- Agent -->
+      <rect x="20" y="130" width="960" height="150" rx="12" class="lay-agent"/>
+      <text x="40" y="156" class="h">Agent service — FastAPI  :8000</text>
+      <text x="40" y="176" class="sm">/chat (SSE) · /kpis · /results · /lineage · /runs/{id}/trace · /answers/{id}/confirm · /dashboards</text>
+      <rect x="40" y="190" width="290" height="76" rx="9" class="box"/>
+      <text x="54" y="212" class="b">Supervisor agent</text>
+      <text x="54" y="231" class="sm">Sonnet 5.5 · plans, fans out, joins</text>
+      <text x="54" y="249" class="sm">escalates to Opus 5.5 on run limits</text>
+      <rect x="345" y="190" width="200" height="76" rx="9" class="box"/>
+      <text x="359" y="212" class="b">Source sub-agents ×N</text>
+      <text x="359" y="231" class="sm">Haiku 4.5 · via delegate</text>
+      <text x="359" y="249" class="sm">parallel, isolated context</text>
+      <rect x="560" y="190" width="190" height="76" rx="9" class="box"/>
+      <text x="574" y="212" class="b">Visualization agent</text>
+      <text x="574" y="231" class="sm">Haiku 4.5 · forced tool</text>
+      <text x="574" y="249" class="sm">→ DashboardSpec</text>
+      <rect x="765" y="190" width="195" height="76" rx="9" class="box"/>
+      <text x="779" y="212" class="b">Deterministic paths</text>
+      <text x="779" y="231" class="sm">KPIs, saved-dashboard</text>
+      <text x="779" y="249" class="sm">replay: no model call</text>
+
+      <path d="M500 280 V316" class="ln-acc" marker-end="url(#ah-acc)"/>
+      <text x="512" y="303" class="xs">MCP streamable HTTP · caller's own token forwarded, never visible to the model</text>
+
+      <!-- Gateway -->
+      <rect x="20" y="318" width="720" height="176" rx="12" class="lay-gw"/>
+      <text x="40" y="344" class="h">Semantic Gateway MCP  :8200 — the only door to data</text>
+      <g>
+        <rect x="40" y="358" width="128" height="56" rx="8" class="box"/><text x="104" y="382" text-anchor="middle" class="b">1 Resolve</text><text x="104" y="401" text-anchor="middle" class="xs">search_context</text>
+        <rect x="178" y="358" width="128" height="56" rx="8" class="box"/><text x="242" y="382" text-anchor="middle" class="b">2 Authorise</text><text x="242" y="401" text-anchor="middle" class="xs">policy + audit row</text>
+        <rect x="316" y="358" width="128" height="56" rx="8" class="box"/><text x="380" y="382" text-anchor="middle" class="b">3 Compile</text><text x="380" y="401" text-anchor="middle" class="xs">metric → SQL / API</text>
+        <rect x="454" y="358" width="128" height="56" rx="8" class="box"/><text x="518" y="382" text-anchor="middle" class="b">4 Route</text><text x="518" y="401" text-anchor="middle" class="xs">mint source token</text>
+        <rect x="592" y="358" width="128" height="56" rx="8" class="box"/><text x="656" y="382" text-anchor="middle" class="b">5 Hold</text><text x="656" y="401" text-anchor="middle" class="xs">result handles</text>
+      </g>
+      <rect x="40" y="426" width="330" height="54" rx="8" class="box"/>
+      <text x="54" y="448" class="b">Result store</text><text x="54" y="467" class="sm">per-caller handles · 15 min · 16 MB / caller</text>
+      <rect x="390" y="426" width="330" height="54" rx="8" class="box"/>
+      <text x="404" y="448" class="b">Hardened DuckDB  combine</text><text x="404" y="467" class="sm">in-memory · no files / network · 5 s · 10k rows</text>
+
+      <!-- Neo4j -->
+      <rect x="770" y="318" width="210" height="176" rx="12" class="lay-graph"/>
+      <text x="786" y="344" class="h">Neo4j context graph</text>
+      <text x="786" y="366" class="sm">metadata only, never rows</text>
+      <text x="786" y="390" class="sm">· ontology</text>
+      <text x="786" y="408" class="sm">· business glossary</text>
+      <text x="786" y="426" class="sm">· metrics, schema, endpoints</text>
+      <text x="786" y="444" class="sm">· query history</text>
+      <text x="786" y="462" class="sm">· reasoning traces</text>
+      <text x="786" y="482" class="xs">+ local embedder (bge-small)</text>
+      <path d="M740 386 H768" class="ln dash" marker-end="url(#ah)" marker-start="url(#ah)"/>
+
+      <!-- arrows to MCP -->
+      <path d="M380 494 V528" class="ln-acc" marker-end="url(#ah-acc)"/>
+      <text x="392" y="516" class="xs">fresh audience-bound token per call (aud &lt;source&gt;-mcp) · per-(caller, source) semaphore + retry</text>
+      <path d="M126 530 H874" class="ln"/>
+      <path d="M126 530 V546" class="ln" marker-end="url(#ah)"/><path d="M313 530 V546" class="ln" marker-end="url(#ah)"/>
+      <path d="M500 530 V546" class="ln" marker-end="url(#ah)"/><path d="M687 530 V546" class="ln" marker-end="url(#ah)"/>
+      <path d="M874 530 V546" class="ln" marker-end="url(#ah)"/>
+
+      <!-- MCP servers -->
+      <g>
+        <rect x="40" y="548" width="172" height="58" rx="9" class="lay-src sref" stroke-width="2"/><text x="126" y="572" text-anchor="middle" class="b">RefMaster MCP</text><text x="126" y="592" text-anchor="middle" class="xs">:8201</text>
+        <rect x="227" y="548" width="172" height="58" rx="9" class="lay-src smkt" stroke-width="2"/><text x="313" y="572" text-anchor="middle" class="b">MarketMaster MCP</text><text x="313" y="592" text-anchor="middle" class="xs">:8202</text>
+        <rect x="414" y="548" width="172" height="58" rx="9" class="lay-src scash" stroke-width="2"/><text x="500" y="572" text-anchor="middle" class="b">CashRecon MCP</text><text x="500" y="592" text-anchor="middle" class="xs">:8203</text>
+        <rect x="601" y="548" width="172" height="58" rx="9" class="lay-src sasset" stroke-width="2"/><text x="687" y="572" text-anchor="middle" class="b">AssetRecon MCP</text><text x="687" y="592" text-anchor="middle" class="xs">:8204</text>
+        <rect x="788" y="548" width="172" height="58" rx="9" class="lay-src sfeed" stroke-width="2"/><text x="874" y="572" text-anchor="middle" class="b">FeedHub MCP</text><text x="874" y="592" text-anchor="middle" class="xs">:8205</text>
+      </g>
+      <rect x="330" y="611" width="340" height="18" rx="4" class="tw"/>
+      <text x="500" y="624" text-anchor="middle" class="sm">same three tools on every server: describe · run_metric · query</text>
+
+      <!-- REST APIs -->
+      <path d="M126 606 V644" class="ln" marker-end="url(#ah)"/><text x="134" y="632" class="xs">REST</text>
+      <path d="M313 606 V644" class="ln" marker-end="url(#ah)"/><text x="321" y="632" class="xs">REST</text>
+      <rect x="40" y="646" width="172" height="50" rx="9" class="box"/><text x="126" y="668" text-anchor="middle" class="b">RefMaster API</text><text x="126" y="686" text-anchor="middle" class="xs">:8101 · JWT scopes</text>
+      <rect x="227" y="646" width="172" height="50" rx="9" class="box"/><text x="313" y="668" text-anchor="middle" class="b">MarketMaster API</text><text x="313" y="686" text-anchor="middle" class="xs">:8102 · JWT scopes</text>
+
+      <path d="M126 696 V728" class="ln" marker-end="url(#ah)"/><path d="M313 696 V728" class="ln" marker-end="url(#ah)"/>
+      <path d="M500 606 V728" class="ln" marker-end="url(#ah)"/><text x="508" y="680" class="xs">SQL · RLS</text>
+      <path d="M687 606 V728" class="ln" marker-end="url(#ah)"/><text x="695" y="680" class="xs">SQL · RLS</text>
+      <path d="M874 606 V728" class="ln" marker-end="url(#ah)"/><text x="882" y="680" class="xs">SQL · RLS</text>
+
+      <!-- Postgres -->
+      <rect x="20" y="730" width="960" height="56" rx="12" class="lay-db"/>
+      <text x="40" y="754" class="h">Postgres (Docker, 127.0.0.1:5434)</text>
+      <text x="40" y="774" class="sm">refmaster · marketmaster · cashrecon · assetrecon · feedhub · app (audit, query_log, agent_runs, saved_dashboards) — FORCE RLS + masking views</text>
+    </svg>
+    </div>
+    <figcaption>Data flows source → gateway result store → UI (by handle). The graph sits on the metadata path only. Neo4j runs on 127.0.0.1:7688.</figcaption>
+  </figure>
+
+  <div class="tw"><table>
+    <thead><tr><th>Layer</th><th>Code</th><th>Responsibility</th></tr></thead>
+    <tbody>
+      <tr><td>UI</td><td><code>frontend/</code></td><td>Next.js 15, React 19, Tailwind 4, ECharts, Zod-validated <code>DashboardSpec</code> renderer</td></tr>
+      <tr><td>Agent service</td><td><code>prism/agent</code></td><td>Supervisor, sub-agents, visualization agent, SSE, KPIs, dashboards, telemetry</td></tr>
+      <tr><td>Semantic gateway</td><td><code>prism/gateway</code></td><td>Single MCP server: retrieval, policy, routing, result store, DuckDB combine, audit</td></tr>
+      <tr><td>Context graph</td><td><code>prism/graph</code></td><td>Loader, role-gated hybrid retrieval, lineage, history distillation, traces</td></tr>
+      <tr><td>Source MCP servers</td><td><code>prism/mcp</code></td><td>Uniform tool contract, metric compiler, SQL guard, REST backend</td></tr>
+      <tr><td>Sources</td><td><code>prism/sources</code>, <code>prism/db</code></td><td>Two mock REST APIs; five databases with DDL, RLS policies and masking</td></tr>
+      <tr><td>Simulator</td><td><code>prism/sim</code></td><td>Fixed-seed shared universe projected into each system, planted stories, canaries, incident</td></tr>
+      <tr><td>Security</td><td><code>prism/security</code></td><td>Personas, entitlements, token minting and verification</td></tr>
+      <tr><td>Evals</td><td><code>prism/evals</code></td><td>Golden and red-team cases, deterministic grading, leak detectors</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<!-- ============ 3 PRINCIPLES ============ -->
+<section id="principles">
+  <h2><span class="num">03</span>Design principles</h2>
+  <div class="cards">
+    <div class="card"><div class="ic">P1</div><h4>One door to the data</h4><p>Agents talk only to the Semantic Gateway. Source MCP servers accept only gateway-minted, audience-bound tokens.</p></div>
+    <div class="card"><div class="ic">P2</div><h4>Governed metrics first</h4><p>Business measures are YAML-defined metrics compiled by code. Free-form SQL / endpoint queries are a guarded fallback, off for metrics-only roles.</p></div>
+    <div class="card"><div class="ic">P3</div><h4>Rows never reach the model</h4><p>Results stay in the gateway. The model gets a handle, columns, row count and at most 5 sample rows; the UI pages the rest by handle.</p></div>
+    <div class="card"><div class="ic">P4</div><h4>Just-in-time context</h4><p>A role-pruned context pack of about 3k tokens from the graph replaces schema dumps.</p></div>
+    <div class="card"><div class="ic">P5</div><h4>Uniform over heterogeneous</h4><p>Every source has the same three MCP tools; the agent neither knows nor cares whether a source is REST or SQL.</p></div>
+    <div class="card"><div class="ic">P6</div><h4>Enforce at the source</h4><p>Context pruning and gateway policy fail early; Postgres RLS with signed claims is the real boundary.</p></div>
+    <div class="card"><div class="ic">P7</div><h4>Deterministic first</h4><p>KPIs, metric maths, joins, chart data and saved-dashboard replays spend no tokens.</p></div>
+    <div class="card"><div class="ic">P8</div><h4>Explicit failure</h4><p>A forbidden or unknown object answers exactly like a missing one; the agent states the limit and stops.</p></div>
+  </div>
+</section>
+
+<!-- ============ 4 SOURCES ============ -->
+<section id="sources">
+  <h2><span class="num">04</span>Data sources &amp; the uniform contract</h2>
+  <p class="kicker">Uniformity comes from the MCP layer, not from the storage</p>
+  <div class="tw"><table>
+    <thead><tr><th>System</th><th>Archetype</th><th>Mastered data</th><th>Exposure</th></tr></thead>
+    <tbody>
+      <tr><td><span class="src" style="background:var(--s-ref)"></span><b>RefMaster</b></td><td>Buy-side reference-data EDM</td><td>Security master, legal entities (valid LEIs), accounts, corporate actions, DQ rules and exceptions, 4-eyes change requests</td><td>Mock REST API :8101 → MCP :8201</td></tr>
+      <tr><td><span class="src" style="background:var(--s-mkt)"></span><b>MarketMaster</b></td><td>Market-data EDM</td><td>Multi-vendor prices (“Vendor A…F”), golden price, suspects (stale / spike / missing / conflict), DQ stage metrics</td><td>Mock REST API :8102 → MCP :8202</td></tr>
+      <tr><td><span class="src" style="background:var(--s-cash)"></span><b>CashRecon</b></td><td>Cash &amp; transaction reconciliation</td><td>Nostro accounts, statements, ledger entries, match rules and groups, breaks</td><td>Postgres (RLS) → MCP :8203</td></tr>
+      <tr><td><span class="src" style="background:var(--s-asset)"></span><b>AssetRecon</b></td><td>Investment-management reconciliation</td><td>Portfolios, internal vs custodian positions, recon runs, exceptions, NAV checks</td><td>Postgres (RLS) → MCP :8204</td></tr>
+      <tr><td><span class="src" style="background:var(--s-feed)"></span><b>FeedHub</b></td><td>Feed connectivity aggregator</td><td>Sources, feeds, deliveries (on time / late / missing / failed), support tickets</td><td>Postgres (RLS) → MCP :8205</td></tr>
+    </tbody>
+  </table></div>
+  <p><b>Why this split.</b> Real data-management platforms expose domain REST APIs, and proving the agent can work over
+  APIs (not only SQL) was a goal. Reconciliation and feed platforms are high-volume relational stores whose analytics
+  path is a read replica with row-level security. Behind the mock REST services the EDMs are also Postgres, but the
+  agent can reach them only through the API.</p>
+
+  <h3>Uniform source tool contract</h3>
+  <div class="tw"><table>
+    <thead><tr><th>Tool</th><th>Purpose</th><th>Guards</th></tr></thead>
+    <tbody>
+      <tr><td><code>describe()</code></td><td>Tables / endpoints, fields and metrics the server offers; feeds the graph loader</td><td>Not used by the agent</td></tr>
+      <tr><td><code>run_metric(metric_id, dimensions, filters, time_range)</code></td><td>A governed measure compiled by code to SQL, or to an API call plus aggregation</td><td>Metric and dimension whitelist from YAML</td></tr>
+      <tr><td><code>query(request)</code></td><td>SQL sources: one <code>SELECT</code>. REST sources: <code>{endpoint_id, params}</code> checked against the endpoint's parameter schema</td><td>sqlglot validation, allow-listed tables, row cap, timeout; rejects <code>set_config</code>, <code>SET</code>, <code>COPY</code>, DDL, <code>pg_*</code>, multi-statement</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>Shared keys make cross-source questions possible</h3>
+  <p>The simulator builds one shared universe (securities with valid ISIN check digits, legal entities with valid LEI
+  checksums, vendors, custodians, portfolios, cash accounts, 90 business days) and projects it into every system, so
+  keys line up. The graph records them as <code>same_key</code> groups (7 in the ontology) and metric-to-metric
+  <code>JOINABLE_ON</code> links:</p>
+  <ul>
+    <li><code>security_id</code> / <code>isin</code>: RefMaster ↔ MarketMaster ↔ AssetRecon</li>
+    <li><code>legal_entity_id</code>: RefMaster ↔ CashRecon (and fund → entity)</li>
+    <li>custodian / <code>source_id</code>: AssetRecon ↔ FeedHub</li>
+    <li>cash account / bank source: CashRecon ↔ FeedHub</li>
+  </ul>
+  <p>Planted stories give the demo answers worth finding, and the evals check them: Vendor A driving 60 of 90
+  corporate-bond price conflicts this week; SRC001 late feeds; PF001/PF002/PF005 position exceptions; LE00016 holding
+  64 of 79 aged USD breaks; and the cross-system incident in <a href="#incident">section 10</a>.</p>
+</section>
+
+<!-- ============ 5 SEMANTIC ============ -->
+<section id="semantic">
+  <h2><span class="num">05</span>The semantic layer: a context graph</h2>
+  <p class="kicker">What the business means, where it lives, how it joins, and what has worked before</p>
+  <p>The semantic layer is a Neo4j graph loaded by <code>make graph</code> from four inputs: each MCP server's metric
+  and REST registries, the Postgres DDL, and hand-authored knowledge YAML in <code>prism/graph/knowledge/</code>
+  (ontology, glossary, seed history). Every executable node carries its <b>address</b> (source, table or endpoint), so
+  a retrieval result is directly actionable. The loader is idempotent and versioned; the gateway refuses to start on
+  an empty or stale graph and hot-swaps its catalog when the graph version moves forward.</p>
+
+  <h3 id="graph-model">Graph model</h3>
+  <figure>
+    <div class="fig">
+    <svg class="d" viewBox="0 0 1000 560" role="img" aria-labelledby="g-t">
+      <title id="g-t">Context graph model: physical, semantic and knowledge nodes and their relationships</title>
+      <!-- column bands -->
+      <rect x="10" y="10" width="330" height="540" rx="12" class="lay-src"/>
+      <text x="26" y="34" class="h">Physical (introspected)</text>
+      <rect x="352" y="10" width="300" height="540" rx="12" class="lay-gw"/>
+      <text x="368" y="34" class="h">Semantic (governed)</text>
+      <rect x="664" y="10" width="326" height="540" rx="12" class="lay-graph"/>
+      <text x="680" y="34" class="h">Knowledge (authored + learned)</text>
+
+      <!-- edges first -->
+      <path d="M110 92 V176" class="ln" marker-end="url(#ah)"/><text x="116" y="140" class="xs">HAS_TABLE</text>
+      <path d="M140 92 L250 176" class="ln" marker-end="url(#ah)"/><text x="196" y="122" class="xs">HAS_ENDPOINT</text>
+      <path d="M90 222 V316" class="ln" marker-end="url(#ah)"/><text x="30" y="272" class="xs">HAS_COLUMN</text>
+      <path d="M270 222 V316" class="ln" marker-end="url(#ah)"/><text x="276" y="272" class="xs">RETURNS</text>
+      <path d="M230 200 H160" class="ln" marker-end="url(#ah)"/><text x="168" y="216" class="xs">BACKED_BY</text>
+      <path d="M220 340 H160" class="ln" marker-end="url(#ah)"/><text x="166" y="333" class="xs">MAPS_TO</text>
+      <path d="M100 362 C 100 420, 140 430, 120 450" class="ln dash" marker-end="url(#ah)"/><text x="30" y="420" class="xs">REFERENCES</text>
+      <path d="M150 360 C 210 430, 230 450, 222 470" class="ln dash" marker-end="url(#ah)"/><text x="196" y="430" class="xs">SAME_KEY_AS</text>
+
+      <path d="M430 184 C 340 130, 220 140, 150 180" class="ln-acc" marker-end="url(#ah-acc)"/>
+      <path d="M420 206 L320 206" class="ln-acc" marker-end="url(#ah-acc)"/><text x="300" y="150" class="xs" style="fill:var(--accent)">COMPUTED_FROM</text>
+      <path d="M500 222 V316" class="ln-acc" marker-end="url(#ah-acc)"/><text x="506" y="272" class="xs" style="fill:var(--accent)">HAS_DIMENSION</text>
+      <path d="M470 362 C 420 430, 200 420, 130 364" class="ln-acc" marker-end="url(#ah-acc)"/><text x="330" y="420" class="xs" style="fill:var(--accent)">ON_COLUMN</text>
+      <path d="M540 222 C 600 300, 600 400, 540 456" class="ln-red" marker-end="url(#ah-red)" marker-start="url(#ah-red)"/><text x="585" y="350" class="xs" style="fill:var(--accent-2)">JOINABLE_ON</text>
+      <text x="585" y="364" class="xs" style="fill:var(--accent-2)">{on: a = b}</text>
+
+      <path d="M760 92 L560 186" class="ln" marker-end="url(#ah)"/><text x="640" y="128" class="xs">DEFINES</text>
+      <path d="M800 220 V108" class="ln" marker-end="url(#ah)"/><text x="806" y="168" class="xs">DEFINES</text>
+      <path d="M700 80 C 450 60, 250 60, 160 182" class="ln dash" marker-end="url(#ah)"/><text x="400" y="62" class="xs">TAGGED_WITH</text>
+      <path d="M880 72 C 925 55, 925 105, 880 96" class="ln" marker-end="url(#ah)"/><text x="918" y="70" class="xs">BROADER</text>
+      <path d="M740 248 C 500 120, 300 150, 170 200" class="ln dash" marker-end="url(#ah)"/><text x="610" y="238" class="xs">IMPLEMENTED_BY</text>
+      <path d="M740 262 C 600 330, 300 330, 170 336" class="ln dash" marker-end="url(#ah)"/><text x="620" y="300" class="xs">IDENTIFIED_BY</text>
+      <path d="M860 270 C 920 300, 920 220, 870 232" class="ln" marker-end="url(#ah)"/><text x="912" y="262" class="xs">RELATED</text>
+      <path d="M800 394 V432" class="ln" marker-end="url(#ah)"/><text x="806" y="418" class="xs">ANSWERED_BY</text>
+      <path d="M740 470 C 640 470, 600 250, 560 220" class="ln" marker-end="url(#ah)"/><text x="640" y="452" class="xs">USED</text>
+      <path d="M740 480 C 640 500, 600 360, 560 346" class="ln" marker-end="url(#ah)"/>
+
+      <!-- nodes: physical -->
+      <rect x="60" y="56" width="110" height="36" rx="18" class="box"/><text x="115" y="79" text-anchor="middle" class="b">Source</text>
+      <rect x="40" y="180" width="120" height="42" rx="8" class="box"/><text x="100" y="206" text-anchor="middle" class="b">Table</text>
+      <rect x="230" y="180" width="90" height="42" rx="8" class="box"/><text x="275" y="206" text-anchor="middle" class="b">Endpoint</text>
+      <rect x="40" y="320" width="120" height="42" rx="8" class="box"/><text x="100" y="346" text-anchor="middle" class="b">Column</text>
+      <rect x="220" y="320" width="100" height="42" rx="8" class="box"/><text x="270" y="346" text-anchor="middle" class="b">Field</text>
+      <rect x="40" y="452" width="120" height="42" rx="8" class="box"/><text x="100" y="472" text-anchor="middle" class="b">Column</text><text x="100" y="487" text-anchor="middle" class="xs">same source (FK)</text>
+      <rect x="180" y="472" width="140" height="42" rx="8" class="box"/><text x="250" y="492" text-anchor="middle" class="b">Column</text><text x="250" y="507" text-anchor="middle" class="xs">other source</text>
+
+      <!-- semantic -->
+      <rect x="420" y="178" width="160" height="44" rx="22" class="box" style="stroke:var(--accent);stroke-width:2"/><text x="500" y="205" text-anchor="middle" class="b">Metric</text>
+      <rect x="440" y="320" width="120" height="42" rx="8" class="box"/><text x="500" y="346" text-anchor="middle" class="b">Dimension</text>
+      <rect x="420" y="456" width="160" height="44" rx="22" class="box" style="stroke:var(--accent-2);stroke-width:2"/><text x="500" y="476" text-anchor="middle" class="b">Metric</text><text x="500" y="492" text-anchor="middle" class="xs">another system</text>
+
+      <!-- knowledge -->
+      <rect x="700" y="62" width="180" height="44" rx="8" class="box"/><text x="790" y="82" text-anchor="middle" class="b">BusinessTerm</text><text x="790" y="98" text-anchor="middle" class="xs">59 terms · synonyms · owner</text>
+      <rect x="740" y="222" width="120" height="48" rx="8" class="box"/><text x="800" y="243" text-anchor="middle" class="b">Concept</text><text x="800" y="260" text-anchor="middle" class="xs">ontology</text>
+      <rect x="740" y="350" width="120" height="44" rx="8" class="box"/><text x="800" y="370" text-anchor="middle" class="b">Question</text><text x="800" y="386" text-anchor="middle" class="xs">seed + distilled</text>
+      <rect x="740" y="436" width="120" height="58" rx="8" class="box"/><text x="800" y="458" text-anchor="middle" class="b">Execution</text><text x="800" y="474" text-anchor="middle" class="xs">plan · count of</text><text x="800" y="487" text-anchor="middle" class="xs">distinct callers</text>
+      <text x="680" y="522" class="xs">Role nodes carry CAN_READ grants; read only by</text>
+      <text x="680" y="537" class="xs">the gateway catalog, never returned by retrieval.</text>
+      <text x="26" y="540" class="xs">Every node: :Ctx {uid, ns, loaded_version, allowed_scopes}</text>
+    </svg>
+    </div>
+    <figcaption>Physical nodes are introspected from DDL and REST registries; metrics, dimensions and join links are governed YAML; terms, concepts and questions are authored or learned. Searchable nodes share a <code>:Searchable</code> label with one vector index and one full-text index.</figcaption>
+  </figure>
+
+  <h3 id="knowledge">Three knowledge layers</h3>
+  <div class="cards">
+    <div class="card"><div class="ic">1 · Ontology</div><h4>What things are</h4><p>10 concepts (Security, LegalEntity, Price, Vendor, Position, Portfolio, Break, …), 9 typed relations and 7 cross-source key groups. <code>IMPLEMENTED_BY</code> leads to tables/endpoints; <code>IDENTIFIED_BY</code> gives the join keys.</p></div>
+    <div class="card"><div class="ic">2 · Glossary</div><h4>What words mean here</h4><p>59 terms in 6 domain glossaries, with synonyms (“nostro” / “cash account”), owners and <code>BROADER</code> hierarchy. Grounds phrases like “aged break” or “late feed” in exact metrics and filters.</p></div>
+    <div class="card"><div class="ic">3 · Query history</div><h4>What has worked before</h4><p>12 curated seed questions, plus human-confirmed answers distilled into <code>Question → Execution → Metric/Dimension</code>. Returned as worked examples; curated seeds always rank first.</p></div>
+  </div>
+  <p><b>Governed metrics.</b> 25 metrics (20 SQL metrics in <code>prism/mcp/metrics/*.yaml</code>, 5 REST metrics in
+  <code>prism/mcp/rest/*.yaml</code>), each with a definition, grain, unit, allowed dimensions and source. The gateway
+  routes a metric by catalog lookup, so the agent never names a source for it. Metric-to-metric
+  <code>JOINABLE_ON {on: "&lt;a dim&gt; = &lt;b dim&gt;"}</code> edges tell the agent how to hop from one system to the next.</p>
+
+  <h3 id="retrieval">The <code>search_context</code> pipeline</h3>
+  <figure>
+    <div class="fig">
+    <svg class="d" viewBox="0 0 1000 250" role="img" aria-labelledby="r-t">
+      <title id="r-t">search_context pipeline from question to a role-gated context pack</title>
+      <g>
+        <rect x="10" y="40" width="148" height="120" rx="10" class="box"/>
+        <text x="84" y="66" text-anchor="middle" class="b">1 Embed</text>
+        <text x="84" y="90" text-anchor="middle" class="sm">local fastembed</text>
+        <text x="84" y="108" text-anchor="middle" class="sm">bge-small-en-v1.5</text>
+        <text x="84" y="132" text-anchor="middle" class="xs">no extra API key</text>
+      </g>
+      <path d="M158 100 H174" class="ln" marker-end="url(#ah)"/>
+      <g>
+        <rect x="176" y="40" width="148" height="120" rx="10" class="box"/>
+        <text x="250" y="66" text-anchor="middle" class="b">2 Hybrid search</text>
+        <text x="250" y="90" text-anchor="middle" class="sm">vector index +</text>
+        <text x="250" y="108" text-anchor="middle" class="sm">BM25 full-text</text>
+        <text x="250" y="132" text-anchor="middle" class="xs">sanitised Lucene query</text>
+      </g>
+      <path d="M324 100 H340" class="ln" marker-end="url(#ah)"/>
+      <g>
+        <rect x="342" y="40" width="148" height="120" rx="10" class="box"/>
+        <text x="416" y="66" text-anchor="middle" class="b">3 RRF fuse</text>
+        <text x="416" y="90" text-anchor="middle" class="sm">per kind, in Cypher</text>
+        <text x="416" y="108" text-anchor="middle" class="sm">metric · term · concept</text>
+        <text x="416" y="126" text-anchor="middle" class="sm">column · question</text>
+      </g>
+      <path d="M490 100 H506" class="ln-red" marker-end="url(#ah-red)"/>
+      <g>
+        <rect x="508" y="40" width="148" height="120" rx="10" class="box" style="stroke:var(--accent-2);stroke-width:2"/>
+        <text x="582" y="66" text-anchor="middle" class="b">4 gate()</text>
+        <text x="582" y="90" text-anchor="middle" class="sm">role filter on every</text>
+        <text x="582" y="108" text-anchor="middle" class="sm">node returned or</text>
+        <text x="582" y="126" text-anchor="middle" class="sm">traversed</text>
+      </g>
+      <path d="M656 100 H672" class="ln" marker-end="url(#ah)"/>
+      <g>
+        <rect x="674" y="40" width="148" height="120" rx="10" class="box"/>
+        <text x="748" y="66" text-anchor="middle" class="b">5 Expand</text>
+        <text x="748" y="90" text-anchor="middle" class="sm">terms → concepts →</text>
+        <text x="748" y="108" text-anchor="middle" class="sm">tables, join paths,</text>
+        <text x="748" y="126" text-anchor="middle" class="sm">1-hop JOINABLE_ON</text>
+      </g>
+      <path d="M822 100 H838" class="ln-acc" marker-end="url(#ah-acc)"/>
+      <g>
+        <rect x="840" y="40" width="150" height="120" rx="10" class="box" style="stroke:var(--accent);stroke-width:2"/>
+        <text x="915" y="66" text-anchor="middle" class="b">6 Context pack</text>
+        <text x="915" y="90" text-anchor="middle" class="sm">≤ ~3k tokens</text>
+        <text x="915" y="108" text-anchor="middle" class="sm">compact JSON</text>
+        <text x="915" y="132" text-anchor="middle" class="xs">trimmed by drop order</text>
+      </g>
+      <text x="10" y="196" class="sm">Pack keys: metrics · terms · concepts · columns · examples · join_paths · metric_links</text>
+      <text x="10" y="216" class="sm">Drop order when over budget: examples → columns → join_paths → metric_links → concepts → terms → metrics (metrics kept longest)</text>
+      <text x="10" y="236" class="sm">Linked-metric expansion: up to 4 extra metrics, one per new source, so a cross-system hop is always in view</text>
+    </svg>
+    </div>
+    <figcaption>Implemented in <code>prism/graph/retrieval.py</code>. <code>gate()</code> is the single visibility predicate; its Python twin <code>model.visible</code> is tested to agree on every node of the loaded graph.</figcaption>
+  </figure>
+  <p>Because the role filter runs <i>inside</i> the Cypher, the model never even learns that a forbidden dataset,
+  column or metric exists. For a metrics-only caller the pack contains no tables, columns, endpoints or sensitive
+  dimensions at all.</p>
+</section>
+
+<!-- ============ 6 GATEWAY ============ -->
+<section id="gateway">
+  <h2><span class="num">06</span>The semantic gateway</h2>
+  <p class="kicker">One MCP server, eleven tools, identity from the token, one audit row per call</p>
+  <p>The gateway (<code>prism/gateway</code>, port 8200) is a stateless streamable-HTTP MCP server accepting only
+  <code>gateway-mcp</code>-audience tokens. It resolves business requests against the catalog, authorises them,
+  compiles and routes them to the right source with a freshly minted token, and keeps the results.</p>
+  <div class="tw"><table>
+    <thead><tr><th>Tool</th><th>What it does</th><th>Who calls it</th></tr></thead>
+    <tbody>
+      <tr><td><code>search_context</code></td><td>Role-filtered context pack</td><td>Model</td></tr>
+      <tr><td><code>run_metric</code></td><td>Governed metric; the catalog picks the source; returns <code>{handle, summary}</code></td><td>Model, KPIs, dashboards</td></tr>
+      <tr><td><code>query_source</code></td><td>Guarded free-form SELECT or endpoint call; not for metrics-only roles</td><td>Model</td></tr>
+      <tr><td><code>combine</code></td><td>One DuckDB SELECT over the caller's own handles, in memory; refuses summing across currencies</td><td>Model</td></tr>
+      <tr><td><code>get_rows</code></td><td>One page (≤ 200 rows) of the caller's own result</td><td>UI</td></tr>
+      <tr><td><code>record_answer</code></td><td>Writes query history (metric ids and dimensions from live handles, never the plan text), stored unverified</td><td>Agent service</td></tr>
+      <tr><td><code>confirm_answer</code></td><td>Human confirmation: sets <code>verified</code> on the caller's own metric-backed answer</td><td>UI</td></tr>
+      <tr><td><code>record_trace</code></td><td>Stores how a run reached its answer, linked to graph nodes via the caller's own handles</td><td>Agent service</td></tr>
+      <tr><td><code>get_trace</code></td><td>The caller's own trace, re-gated against their role</td><td>UI</td></tr>
+      <tr><td><code>mark_trace_confirmed</code></td><td>Marks the trace when its answer is confirmed</td><td>Agent service</td></tr>
+      <tr><td><code>lineage</code></td><td>Role-gated subgraph behind one of the caller's handles</td><td>UI</td></tr>
+    </tbody>
+  </table></div>
+  <p>Only the first four are offered to the model. The rest are used by the service or the UI and are tested to be absent from every LLM tool list.</p>
+
+  <div class="two">
+    <div class="card"><div class="ic">Handles</div><h4>Results stay server-side</h4><p>A result lives in an in-memory store for 15 minutes, owned by the caller's <code>sub</code>. Another caller's handle answers <code>unknown_handle</code>, the same as a missing one. Store quota: 128 MB total, 16 MB per caller; when full, a new result is refused rather than evicting someone else's.</p></div>
+    <div class="card"><div class="ic">Limits</div><h4>Per-caller fairness</h4><p><code>search_context</code>: 2 in flight, 60 a minute. <code>record_answer</code>: 10 a minute. <code>combine</code>: 1 at a time, permit held until the DuckDB thread really ends. Per-(caller, source) semaphores and retry on source calls.</p></div>
+    <div class="card"><div class="ic">Audit</div><h4>Names and counts, never values</h4><p>Every call writes one <code>app.audit</code> row: catalog names, counts and error codes; the question only as an HMAC. No row values, no tokens.</p></div>
+    <div class="card"><div class="ic">Errors</div><h4>Typed codes</h4><p><code>not_permitted</code>, <code>metrics_only</code>, <code>invalid_request</code>, <code>unknown_handle</code>, <code>context_unavailable</code>, <code>source_unavailable</code>, <code>rate_limited</code>, <code>gateway_busy</code>, <code>currency_mixing</code>, <code>result_store_full</code>.</p></div>
+  </div>
+</section>
+
+<!-- ============ 7 AGENTS ============ -->
+<section id="agents">
+  <h2><span class="num">07</span>The agentic system</h2>
+  <p class="kicker">A supervisor that plans, sub-agents that fetch, a specialist that charts</p>
+
+  <figure>
+    <div class="fig">
+    <svg class="d" viewBox="0 0 1000 440" role="img" aria-labelledby="ag-t">
+      <title id="ag-t">Agent topology: supervisor with six tools, delegated sub-agents, visualization agent, all data via the gateway</title>
+      <rect x="10" y="10" width="980" height="300" rx="14" class="lay-agent"/>
+      <text x="28" y="36" class="h">Agent service (per /chat request, identity in UserContext only)</text>
+
+      <rect x="330" y="56" width="340" height="112" rx="12" class="box" style="stroke:var(--accent);stroke-width:2"/>
+      <text x="500" y="82" text-anchor="middle" class="h">Supervisor · Sonnet 5.5</text>
+      <text x="500" y="102" text-anchor="middle" class="sm">frozen system prompt (cached) + run context</text>
+      <text x="500" y="120" text-anchor="middle" class="sm">≤ 8 turns · ≤ 24 tool calls · 90 s</text>
+      <text x="500" y="146" text-anchor="middle" class="mono">search_context · run_metric · query_source</text>
+      <text x="500" y="161" text-anchor="middle" class="mono">combine · delegate · visualize</text>
+
+      <rect x="30" y="200" width="270" height="94" rx="10" class="box"/>
+      <text x="44" y="224" class="b">Source sub-agent ×N  · Haiku 4.5</text>
+      <text x="44" y="244" class="sm">one source, one sub-question, own context</text>
+      <text x="44" y="262" class="sm">≤ 4 turns · ≤ 8 calls · 40 s</text>
+      <text x="44" y="282" class="mono" style="font-size:10px">search_context, run_metric, query_source</text>
+
+      <rect x="700" y="200" width="270" height="94" rx="10" class="box"/>
+      <text x="714" y="224" class="b">Visualization agent · Haiku 4.5</text>
+      <text x="714" y="244" class="sm">sees handle columns + row counts only</text>
+      <text x="714" y="262" class="sm">forced emit_dashboard_spec, 1 repair</text>
+      <text x="714" y="282" class="sm">→ table fallback; never fails the turn</text>
+
+      <rect x="360" y="200" width="280" height="94" rx="10" class="box"/>
+      <text x="374" y="224" class="b">Run state</text>
+      <text x="374" y="244" class="sm">handles + recipes · steps (trace) · spec</text>
+      <text x="374" y="262" class="sm">usage meter (tokens, cache reads, cost)</text>
+      <text x="374" y="282" class="sm">SSE emitter: plan · widget · summary</text>
+
+      <path d="M380 168 L200 198" class="ln-acc" marker-end="url(#ah-acc)"/><text x="230" y="176" class="xs" style="fill:var(--accent)">delegate (parallel)</text>
+      <path d="M620 168 L820 198" class="ln-acc" marker-end="url(#ah-acc)"/><text x="726" y="176" class="xs" style="fill:var(--accent)">visualize (once)</text>
+      <path d="M500 168 V198" class="ln" marker-end="url(#ah)"/>
+
+      <path d="M165 294 V352" class="ln" marker-end="url(#ah)"/>
+      <path d="M500 310 V352" class="ln" marker-end="url(#ah)"/>
+      <text x="176" y="330" class="xs">gateway tools</text>
+      <text x="510" y="336" class="xs">gateway tools (caller's token at the transport)</text>
+
+      <rect x="10" y="354" width="980" height="74" rx="12" class="lay-gw"/>
+      <text x="28" y="380" class="h">Semantic Gateway MCP</text>
+      <text x="28" y="402" class="sm">returns handle + summary (columns, row count, ≤ 5 sample rows) · tool output capped at 12k chars (20k for the context pack)</text>
+      <text x="28" y="419" class="sm">not_permitted / metrics_only are final: the agent states the limit and stops · caller-fixable errors: one repair</text>
+    </svg>
+    </div>
+    <figcaption>All agents run inside one FastAPI request. The supervisor sees a fixed six-tool list, so the prompt prefix stays byte-stable and cacheable.</figcaption>
+  </figure>
+
+  <h3 id="deep-agent">The deep-agent pattern, built on the Messages API</h3>
+  <p>Prism implements the <b>deep-agent pattern</b> (a planning agent that delegates to sub-agents with their own
+  context windows, offloads bulky state out of the context, uses specialist sub-agents and keeps a durable record of
+  its reasoning) directly on the Anthropic Messages API with a small, hand-written loop
+  (<code>prism/agent/runner.py</code>). It does <b>not</b> use a deep-agents framework library; the loop sits behind a
+  <code>Runner</code> protocol so a framework or the Agent SDK can be swapped in later.</p>
+  <div class="tw"><table>
+    <thead><tr><th>Deep-agent trait</th><th>How Prism realises it</th><th>Where</th></tr></thead>
+    <tbody>
+      <tr><td>Planning</td><td>The supervisor reads the context pack, classifies the question (metric / single-source / cross-source) and plans calls; its notes before each tool batch are recorded as trace notes</td><td><code>prompts.py</code>, <code>runner.py</code> (observe hook)</td></tr>
+      <tr><td>Sub-agents with isolated context</td><td><code>delegate(source, sub_question)</code> spawns a Haiku sub-agent with its own message history and a three-tool list; it returns only handles, columns, row counts and a ≤ 600-char note</td><td><code>tools.py::_delegate</code></td></tr>
+      <tr><td>Context offloading (“virtual filesystem”)</td><td>Result handles in the gateway store play the role of files: the model refers to data by handle and joins it server-side with <code>combine</code>; full rows never enter the context</td><td>gateway <code>results.py</code>, <code>combine.py</code></td></tr>
+      <tr><td>Specialist sub-agent</td><td>Visualization agent with forced structured output, server-side validation (handles exist, columns exist, type suits data), one repair, deterministic fallback</td><td><code>tools.py::_visualize</code>, <code>spec.py</code></td></tr>
+      <tr><td>Detailed, stable instructions</td><td>Frozen system prompts with no per-request values, cached; per-user role, dates and readable systems after the cache breakpoint</td><td><code>prompts.py::dynamic_context</code></td></tr>
+      <tr><td>Parallelism</td><td>All tool calls in one model turn run with <code>asyncio.gather</code>; client-side gates queue fan-out to match gateway per-caller limits</td><td><code>runner.py</code>, <code>tools.py</code></td></tr>
+      <tr><td>Guardrails</td><td>Hard caps on turns, tool calls and wall clock; schema-checked arguments; tool failures become results, never crashes</td><td><code>RunLimits</code></td></tr>
+      <tr><td>Memory</td><td>Long-term: confirmed query history distilled into the graph. Per run: a reasoning trace in Neo4j linked to touched catalog nodes</td><td><code>graph/history.py</code>, <code>graph/traces.py</code></td></tr>
+      <tr><td>Escalation</td><td>If the supervisor hits a run limit, the run retries once on Opus 5.5 (handles kept)</td><td><code>service.py</code></td></tr>
+    </tbody>
+  </table></div>
+
+  <h3 id="chat-turn">One <code>/chat</code> turn</h3>
+  <figure>
+    <div class="fig">
+    <svg class="d" viewBox="0 0 1040 720" role="img" aria-labelledby="sq-t">
+      <title id="sq-t">Sequence of one chat turn from the UI through agents, gateway, graph and sources</title>
+      <!-- lane heads -->
+      <g>
+        <rect x="15" y="10" width="100" height="36" rx="8" class="lay-ui"/><text x="65" y="33" text-anchor="middle" class="b">UI</text>
+        <rect x="145" y="10" width="100" height="36" rx="8" class="lay-agent"/><text x="195" y="33" text-anchor="middle" class="b">Agent API</text>
+        <rect x="275" y="10" width="100" height="36" rx="8" class="lay-agent"/><text x="325" y="33" text-anchor="middle" class="b">Supervisor</text>
+        <rect x="405" y="10" width="100" height="36" rx="8" class="lay-agent"/><text x="455" y="33" text-anchor="middle" class="b">Sub-agent</text>
+        <rect x="535" y="10" width="100" height="36" rx="8" class="lay-agent"/><text x="585" y="33" text-anchor="middle" class="b">Viz agent</text>
+        <rect x="665" y="10" width="100" height="36" rx="8" class="lay-gw"/><text x="715" y="33" text-anchor="middle" class="b">Gateway</text>
+        <rect x="795" y="10" width="100" height="36" rx="8" class="lay-graph"/><text x="845" y="33" text-anchor="middle" class="b">Neo4j</text>
+        <rect x="925" y="10" width="100" height="36" rx="8" class="lay-src"/><text x="975" y="33" text-anchor="middle" class="b">Source MCP</text>
+      </g>
+      <g>
+        <path d="M65 46 V710" class="life"/><path d="M195 46 V710" class="life"/><path d="M325 46 V710" class="life"/>
+        <path d="M455 46 V710" class="life"/><path d="M585 46 V710" class="life"/><path d="M715 46 V710" class="life"/>
+        <path d="M845 46 V710" class="life"/><path d="M975 46 V710" class="life"/>
+      </g>
+      <!-- messages -->
+      <path d="M65 76 H193" class="ln-acc" marker-end="url(#ah-acc)"/><text x="72" y="70" class="xs">POST /chat · JWT</text>
+      <path d="M195 104 H323" class="ln" marker-end="url(#ah)"/><text x="202" y="98" class="xs">question + run ctx</text>
+
+      <path d="M325 132 H713" class="ln" marker-end="url(#ah)"/><text x="400" y="126" class="xs">1 · search_context(question)</text>
+      <path d="M715 154 H843" class="ln" marker-end="url(#ah)"/><text x="722" y="148" class="xs">hybrid + gate()</text>
+      <path d="M845 176 H717" class="ln dash" marker-end="url(#ah)"/><text x="752" y="192" class="xs">hits, paths</text>
+      <path d="M715 206 H327" class="ln dash" marker-end="url(#ah)"/><text x="400" y="200" class="xs">context pack (~3k tokens)</text>
+
+      <rect x="250" y="222" width="790" height="196" rx="8" fill="none" class="ln dash"/>
+      <text x="258" y="238" class="xs b" style="font-weight:700">alt: fast path (governed metric) or delegate per source, in parallel</text>
+      <path d="M325 258 H713" class="ln" marker-end="url(#ah)"/><text x="400" y="252" class="xs">2a · run_metric(metric_id, dims, filters)</text>
+      <path d="M325 286 H453" class="ln-acc" marker-end="url(#ah-acc)"/><text x="332" y="280" class="xs">2b · delegate</text>
+      <path d="M455 312 H713" class="ln" marker-end="url(#ah)"/><text x="470" y="306" class="xs">run_metric / query_source</text>
+      <path d="M715 336 H973" class="ln" marker-end="url(#ah)"/><text x="728" y="330" class="xs">aud &lt;source&gt;-mcp token</text>
+      <path d="M975 360 H717" class="ln dash" marker-end="url(#ah)"/><text x="790" y="376" class="xs">rows → result store</text>
+      <path d="M715 392 H457" class="ln dash" marker-end="url(#ah)"/><text x="530" y="386" class="xs">handle + summary</text>
+      <path d="M455 410 H327" class="ln dash" marker-end="url(#ah)"/><text x="345" y="404" class="xs">handles + note</text>
+
+      <path d="M325 440 H197" class="ln-acc" marker-end="url(#ah-acc)"/><text x="215" y="434" class="xs">plan event</text>
+      <path d="M195 452 H67" class="ln-acc" marker-end="url(#ah-acc)"/><text x="80" y="466" class="xs">SSE: plan</text>
+
+      <path d="M325 488 H713" class="ln" marker-end="url(#ah)"/><text x="400" y="482" class="xs">3 · combine(sql, handles) — DuckDB</text>
+      <path d="M715 508 H327" class="ln dash" marker-end="url(#ah)"/><text x="400" y="522" class="xs">joined handle</text>
+
+      <path d="M325 546 H583" class="ln-acc" marker-end="url(#ah-acc)"/><text x="345" y="540" class="xs">4 · visualize(handles, intent)</text>
+      <path d="M585 568 H327" class="ln dash" marker-end="url(#ah)"/><text x="400" y="582" class="xs">DashboardSpec (validated)</text>
+      <path d="M195 594 H67" class="ln-acc" marker-end="url(#ah-acc)"/><text x="80" y="588" class="xs">SSE: widget ×n</text>
+
+      <path d="M325 620 H197" class="ln" marker-end="url(#ah)"/><text x="215" y="614" class="xs">final answer</text>
+      <path d="M195 640 H67" class="ln-acc" marker-end="url(#ah-acc)"/><text x="80" y="634" class="xs">SSE: summary</text>
+      <path d="M195 664 H713" class="ln" marker-end="url(#ah)"/><text x="300" y="658" class="xs">5 · record_answer (→ SSE answer, record_id) · record_trace</text>
+      <path d="M195 694 H67" class="ln-acc" marker-end="url(#ah-acc)"/><text x="80" y="688" class="xs">SSE: telemetry</text>
+      <text x="210" y="706" class="xs">tokens, cache reads, turns, cost → app.agent_runs</text>
+    </svg>
+    </div>
+    <figcaption>The UI fetches rows for each widget by handle (<code>/results/{handle}</code> → <code>get_rows</code>), so data never passes through the model. On error the stream emits an <code>error</code> event and still writes telemetry.</figcaption>
+  </figure>
+
+  <h3>Cost, latency and caching</h3>
+  <ul>
+    <li><b>Prompt caching:</b> the frozen system prompt and the fixed tool list sit before the cache breakpoint; the run context (today, data as-of, roles, metrics-only flag, readable systems) comes after. Cache reads are metered per turn.</li>
+    <li><b>Model tiering:</b> Sonnet 5.5 supervises; Haiku 4.5 runs sub-agents and charting; Opus 5.5 only on escalation.</li>
+    <li><b>No tokens on deterministic work:</b> <code>/kpis</code> calls governed metrics directly (cached per role for 60 s); saved dashboards replay stored recipes with the current user's access and no model call.</li>
+    <li><b>Telemetry:</b> each run writes <code>app.agent_runs</code> (question as HMAC, path, models, input / output / cache-read tokens, turns, tool calls and latency, cost, status).</li>
+  </ul>
+
+  <h3 id="cross-system">Cross-system investigation pattern</h3>
+  <p>For “why did this happen” or “what else did it affect” questions, the supervisor prompt teaches a four-step pattern that uses only governed metrics:</p>
+  <ol class="steps">
+    <li><b>Anchor.</b> Run the metric the question starts from, grouped by its key dimension(s).</li>
+    <li><b>Follow links.</b> The pack's <code>metric_links</code> say which metric of another system joins on which key. Run each linked metric filtered by the key values found so far; issue calls in parallel when their keys are known. Stop when every readable system is checked or a hop returns nothing.</li>
+    <li><b>Join.</b> One <code>combine</code> over up to 8 handles, hop by hop, because the key changes along the chain (portfolio → security → source → entity).</li>
+    <li><b>Answer.</b> The causal chain in time order, citing numbers from results only, and naming every system that could not be checked (not readable, refused or not linked) instead of implying the chain is complete.</li>
+  </ol>
+</section>
+
+<!-- ============ 8 SECURITY ============ -->
+<section id="security">
+  <h2><span class="num">08</span>Security: RBAC + RLS, defence in depth</h2>
+  <p class="kicker">The model is never the security boundary</p>
+
+  <figure>
+    <div class="fig">
+    <svg class="d" viewBox="0 0 1000 250" role="img" aria-labelledby="s-t">
+      <title id="s-t">On-behalf-of identity flow with audience-bound tokens down to Postgres row-level security</title>
+      <g>
+        <rect x="10" y="50" width="140" height="80" rx="10" class="lay-ui"/><text x="80" y="82" text-anchor="middle" class="b">Browser</text><text x="80" y="102" text-anchor="middle" class="xs">persona sign-in</text>
+        <rect x="180" y="50" width="140" height="80" rx="10" class="lay-agent"/><text x="250" y="82" text-anchor="middle" class="b">Agent API</text><text x="250" y="102" text-anchor="middle" class="xs">verifies, forwards</text><text x="250" y="117" text-anchor="middle" class="xs">token as-is</text>
+        <rect x="350" y="50" width="140" height="80" rx="10" class="lay-gw"/><text x="420" y="82" text-anchor="middle" class="b">Gateway</text><text x="420" y="102" text-anchor="middle" class="xs">claims → policy</text><text x="420" y="117" text-anchor="middle" class="xs">mints per call</text>
+        <rect x="520" y="50" width="140" height="80" rx="10" class="lay-src"/><text x="590" y="82" text-anchor="middle" class="b">Source MCP</text><text x="590" y="102" text-anchor="middle" class="xs">verifies audience</text>
+        <rect x="690" y="50" width="140" height="80" rx="10" class="box"/><text x="760" y="82" text-anchor="middle" class="b">REST API</text><text x="760" y="102" text-anchor="middle" class="xs">JWT scopes</text><text x="760" y="117" text-anchor="middle" class="xs">(EDMs only)</text>
+        <rect x="860" y="50" width="130" height="80" rx="10" class="lay-db"/><text x="925" y="82" text-anchor="middle" class="b">Postgres</text><text x="925" y="102" text-anchor="middle" class="xs">RLS + masking</text>
+      </g>
+      <path d="M150 90 H178" class="ln-acc" marker-end="url(#ah-acc)"/>
+      <path d="M320 90 H348" class="ln-acc" marker-end="url(#ah-acc)"/>
+      <path d="M490 90 H518" class="ln-acc" marker-end="url(#ah-acc)"/>
+      <path d="M660 90 H688" class="ln-acc" marker-end="url(#ah-acc)"/>
+      <path d="M830 90 H858" class="ln-acc" marker-end="url(#ah-acc)"/>
+      <text x="165" y="160" class="mono" text-anchor="middle">aud gateway-mcp</text>
+      <text x="335" y="178" class="mono" text-anchor="middle">same token</text>
+      <text x="505" y="160" class="mono" text-anchor="middle">aud &lt;source&gt;-mcp</text>
+      <text x="675" y="178" class="mono" text-anchor="middle">aud &lt;edm&gt;-api</text>
+      <text x="845" y="160" class="mono" text-anchor="middle">signed app.ctx</text>
+      <text x="10" y="216" class="sm">Tokens are short-lived (≤ 1 h) and audience-bound: a token for one server is rejected by every other. Source tokens are minted from a claim whitelist, never forwarded.</text>
+      <text x="10" y="236" class="sm">No tool accepts a user id or role as an argument; the LLM never sees any token.</text>
+    </svg>
+    </div>
+  </figure>
+
+  <div class="tw"><table>
+    <thead><tr><th>Layer</th><th>Mechanism</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td>1 · Context pruning</td><td><code>gate()</code> inside every retrieval and lineage Cypher</td><td>The model never learns about forbidden datasets or columns</td></tr>
+      <tr><td>2 · Gateway policy</td><td>Catalog-derived grants checked before routing; one audit row per call; existence never leaked</td><td>Early, explicit refusals at a single choke point</td></tr>
+      <tr><td>3 · Enforcement at source</td><td>Postgres <code>FORCE ROW LEVEL SECURITY</code>, non-owner <code>NOBYPASSRLS</code> role, HMAC-signed claims verified by <code>SECURITY DEFINER</code> functions in <code>prism_sec</code>, masking views for sensitive columns</td><td>The real boundary: even LLM-written SQL cannot forge entitlements</td></tr>
+    </tbody>
+  </table></div>
+  <p>Role checks run in <b>four places</b>: Python <code>can()</code>, the SQL RLS functions, the graph's Cypher
+  <code>gate()</code> and the gateway policy. A test keeps all four in agreement.</p>
+
+  <pre><code>-- per tool call (prism/db/session.py)
+BEGIN READ ONLY;
+SET LOCAL ROLE bi_reader;                             -- non-owner, NOBYPASSRLS
+SELECT set_config('app.ctx', '&lt;HMAC-signed claims&gt;', true);
+SELECT set_config('statement_timeout', '&lt;ms&gt;', true);
+&lt;validated SELECT&gt;;
+COMMIT;
+
+-- policy on every table (prism/db/policies.py), FORCE ROW LEVEL SECURITY
+CREATE POLICY prism_read ON cashrecon.breaks FOR SELECT
+  USING (prism_sec.can('cashrecon', 'breaks')
+         AND (prism_sec.allowed('region') @&gt; ARRAY['*'] OR region = ANY(prism_sec.allowed('region'))));
+-- prism_sec.claims() / can() / allowed() are SECURITY DEFINER and verify the HMAC on app.ctx</code></pre>
+
+  <h3>Personas</h3>
+  <div class="tw"><table>
+    <thead><tr><th>Persona</th><th>Sees</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td><code>steward</code></td><td>RefMaster and MarketMaster</td><td>Reference-data steward</td></tr>
+      <tr><td><code>cash_ops_emea</code></td><td>CashRecon and FeedHub</td><td>EMEA rows and bank feeds only; account numbers masked</td></tr>
+      <tr><td><code>invest_ops_growth</code></td><td>AssetRecon, FeedHub, parts of RefMaster</td><td>Growth funds and custodian feeds only</td></tr>
+      <tr><td><code>bi_analyst</code></td><td>Every source, metrics only</td><td>No <code>query_source</code>, no sensitive dimension, no identifier × date grain</td></tr>
+      <tr><td><code>head_data</code></td><td>Everything</td><td>Includes PII read</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>Prompt-injection hygiene</h3>
+  <ul>
+    <li>Context-pack examples and tool results are wrapped and labelled as data; the prompts say instructions inside them are ignored.</li>
+    <li>The toolset is read-only: no generic fetch, no write tools. Entitlements cannot be changed by the conversation.</li>
+    <li>The simulator plants injected-instruction canaries in ticket and comment text; red-team evals fail on any canary in an answer.</li>
+    <li>Distilled history is sanitised (length, character set, no tool names, SQL verbs, instructions, links or literal values) and needs several distinct callers, so one user cannot plant examples for others.</li>
+  </ul>
+</section>
+
+<!-- ============ 9 LEARNING ============ -->
+<section id="learning">
+  <h2><span class="num">09</span>Learning loop &amp; reasoning traces</h2>
+  <p class="kicker">The semantic layer gets better from confirmed answers, never from unverified ones</p>
+  <figure>
+    <div class="fig">
+    <svg class="d" viewBox="0 0 1000 300" role="img" aria-labelledby="l-t">
+      <title id="l-t">Learning loop from answer to confirmed history and back into retrieval</title>
+      <g>
+        <rect x="20" y="40" width="170" height="74" rx="10" class="box"/><text x="105" y="68" text-anchor="middle" class="b">Answer delivered</text><text x="105" y="88" text-anchor="middle" class="xs">metric-backed widgets</text>
+        <rect x="230" y="40" width="170" height="74" rx="10" class="box"/><text x="315" y="68" text-anchor="middle" class="b">record_answer</text><text x="315" y="88" text-anchor="middle" class="xs">app.query_log</text><text x="315" y="102" text-anchor="middle" class="xs">verified = false</text>
+        <rect x="440" y="40" width="170" height="74" rx="10" class="box" style="stroke:var(--ok);stroke-width:2"/><text x="525" y="68" text-anchor="middle" class="b">Correct? Confirm</text><text x="525" y="88" text-anchor="middle" class="xs">a person confirms</text><text x="525" y="102" text-anchor="middle" class="xs">verified = true</text>
+        <rect x="650" y="40" width="170" height="74" rx="10" class="box"/><text x="735" y="68" text-anchor="middle" class="b">make distill</text><text x="735" y="88" text-anchor="middle" class="xs">sanitise · ≥ N callers</text><text x="735" y="102" text-anchor="middle" class="xs">read-only transaction</text>
+        <rect x="650" y="190" width="170" height="74" rx="10" class="lay-graph"/><text x="735" y="218" text-anchor="middle" class="b">Question → Execution</text><text x="735" y="238" text-anchor="middle" class="xs">→ Metric / Dimension</text>
+        <rect x="390" y="190" width="200" height="74" rx="10" class="lay-gw"/><text x="490" y="218" text-anchor="middle" class="b">search_context</text><text x="490" y="238" text-anchor="middle" class="xs">examples (seeds rank first),</text><text x="490" y="252" text-anchor="middle" class="xs">shown only if all USED visible</text>
+        <rect x="130" y="190" width="200" height="74" rx="10" class="lay-agent"/><text x="230" y="218" text-anchor="middle" class="b">Better plans</text><text x="230" y="238" text-anchor="middle" class="xs">fewer turns, right metric</text>
+      </g>
+      <path d="M190 77 H228" class="ln" marker-end="url(#ah)"/>
+      <path d="M400 77 H438" class="ln" marker-end="url(#ah)"/>
+      <path d="M610 77 H648" class="ln" marker-end="url(#ah)"/>
+      <path d="M735 114 V188" class="ln" marker-end="url(#ah)"/>
+      <path d="M650 227 H592" class="ln" marker-end="url(#ah)"/>
+      <path d="M390 227 H332" class="ln" marker-end="url(#ah)"/>
+      <path d="M150 190 C 90 170, 90 140, 105 116" class="ln" marker-end="url(#ah)"/>
+      <text x="860" y="70" class="xs">one caller can't</text><text x="860" y="84" class="xs">plant examples:</text><text x="860" y="98" class="xs">PRISM_HISTORY_</text><text x="860" y="112" class="xs">MIN_CALLERS (2)</text>
+    </svg>
+    </div>
+    <figcaption>Distilled questions add examples only, never metrics. A question naming a restricted row-scope value (EMEA, Growth, …) is skipped. Re-run <code>make distill</code> after every <code>make graph</code>.</figcaption>
+  </figure>
+
+  <h3>Reasoning traces (“How I got this”)</h3>
+  <p>Each answered run leaves a decision trace in Neo4j, beside (never inside) the catalog:</p>
+  <pre><code>(:Trace {run_id, sub, question, answer, path, status, confirmed, expires_at})
+  -[:HAS_STEP]-&gt;(:TraceStep {seq, parent, kind, label, note, considered, ms, status})
+       -[:CALLED]-&gt;(:ToolCall {tool, args_json, handle, rows, truncated})
+  (:TraceStep)-[:TOUCHED]-&gt;(Metric | Source | Dimension | Table | Endpoint | Column | Field)
+(:Trace)-[:ANSWERED_WITH]-&gt;(:Metric)</code></pre>
+  <ul>
+    <li>Written by the gateway (<code>record_trace</code>); the agent holds no graph credentials.</li>
+    <li>Links come only from the caller's own live handles and only to nodes their role passes; free text never becomes a link.</li>
+    <li>Owner-only reads, re-gated on read, 7-day retention; survives <code>make graph</code>; invisible to retrieval, lineage and the catalog.</li>
+  </ul>
+</section>
+
+<!-- ============ 10 INCIDENT ============ -->
+<section id="incident">
+  <h2><span class="num">10</span>Worked example: one incident across all five systems</h2>
+  <p class="kicker">“Why did PF003 breach its NAV tolerance on 24 September?”</p>
+  <p>The simulator plants a realistic incident whose cause runs through every platform: a 2-for-1 split on security
+  <code>SEC001982</code> (issuer <code>LE00364</code>) is missed because a corporate-actions feed failed.</p>
+  <figure>
+    <div class="fig">
+    <svg class="d" viewBox="0 0 1000 330" role="img" aria-labelledby="i-t">
+      <title id="i-t">Incident chain from FeedHub to RefMaster, MarketMaster, AssetRecon and CashRecon with the join key at each hop</title>
+      <g>
+        <rect x="10" y="40" width="166" height="170" rx="10" class="box"/><rect x="10" y="40" width="166" height="6" rx="3" class="ffeed"/>
+        <text x="24" y="70" class="b">1 · FeedHub</text>
+        <text x="24" y="94" class="sm">SRC005 corporate-</text><text x="24" y="110" class="sm">actions feed failed</text><text x="24" y="126" class="sm">23 Sep, late 24 Sep</text>
+        <text x="24" y="196" class="xs">late_feeds · deliveries</text>
+
+        <rect x="214" y="40" width="166" height="170" rx="10" class="box"/><rect x="214" y="40" width="166" height="6" rx="3" class="fref"/>
+        <text x="228" y="70" class="b">2 · RefMaster</text>
+        <text x="228" y="94" class="sm">split stays pending;</text><text x="228" y="110" class="sm">open DQ exception</text><text x="228" y="126" class="sm">on SEC001982</text>
+        <text x="228" y="196" class="xs">exceptions · corp actions</text>
+
+        <rect x="418" y="40" width="166" height="170" rx="10" class="box"/><rect x="418" y="40" width="166" height="6" rx="3" class="fmkt"/>
+        <text x="432" y="70" class="b">3 · MarketMaster</text>
+        <text x="432" y="94" class="sm">halved price flagged</text><text x="432" y="110" class="sm">as spike, accepted</text><text x="432" y="126" class="sm">into golden price</text>
+        <text x="432" y="196" class="xs">price suspects</text>
+
+        <rect x="622" y="40" width="166" height="170" rx="10" class="box"/><rect x="622" y="40" width="166" height="6" rx="3" class="fasset"/>
+        <text x="636" y="70" class="b">4 · AssetRecon</text>
+        <text x="636" y="94" class="sm">PF003, PF019, PF021,</text><text x="636" y="110" class="sm">PF025 breach NAV</text><text x="636" y="126" class="sm">24–25 Sep; corporate_</text><text x="636" y="142" class="sm">action exceptions</text>
+        <text x="636" y="196" class="xs">nav breaches · exceptions</text>
+
+        <rect x="826" y="40" width="166" height="170" rx="10" class="box"/><rect x="826" y="40" width="166" height="6" rx="3" class="fcash"/>
+        <text x="840" y="70" class="b">5 · CashRecon</text>
+        <text x="840" y="94" class="sm">cash-in-lieu lands</text><text x="840" y="110" class="sm">unmatched on PF003's</text><text x="840" y="126" class="sm">account CA0063,</text><text x="840" y="142" class="sm">29 Sep</text>
+        <text x="840" y="196" class="xs">open breaks</text>
+      </g>
+      <path d="M176 125 H212" class="ln-red" marker-end="url(#ah-red)"/>
+      <path d="M380 125 H416" class="ln-red" marker-end="url(#ah-red)"/>
+      <path d="M584 125 H620" class="ln-red" marker-end="url(#ah-red)"/>
+      <path d="M788 125 H824" class="ln-red" marker-end="url(#ah-red)"/>
+      <text x="194" y="240" text-anchor="middle" class="mono">source_id</text>
+      <text x="398" y="262" text-anchor="middle" class="mono">security_id</text>
+      <text x="602" y="240" text-anchor="middle" class="mono">security_id</text>
+      <text x="806" y="262" text-anchor="middle" class="mono">fund entity / account</text>
+      <path d="M194 228 V140" class="ln dash"/><path d="M398 250 V140" class="ln dash"/><path d="M602 228 V140" class="ln dash"/><path d="M806 250 V140" class="ln dash"/>
+      <text x="10" y="300" class="sm">Each arrow is a JOINABLE_ON edge between governed metrics. The agent anchors at AssetRecon (the question), follows links outward,</text>
+      <text x="10" y="318" class="sm">combines 5–8 handles hop by hop, and narrates the chain in time order: feed → reference data → price → positions / NAV → cash.</text>
+    </svg>
+    </div>
+  </figure>
+  <p><b>Why this matters.</b> No single system explains the breach. The price is right; the reference data missed the
+  split; the feed failure caused it; the cash break is its tail. The semantic layer supplies exactly what the agent
+  needs to connect them with governed metrics only: join-key dimensions, metric links and the investigation pattern.
+  A persona who cannot read some systems gets the part of the chain they are entitled to, with the unreadable systems
+  named. Three golden cases replay the incident from different entry points (the NAV breach, the late feed and the
+  issuer).</p>
+</section>
+
+<!-- ============ 11 UI ============ -->
+<section id="ui">
+  <h2><span class="num">11</span>UI &amp; provenance</h2>
+  <div class="cards">
+    <div class="card"><div class="ic">Workspace</div><h4>KPIs + canvas + assistant</h4><p>Four deterministic KPI tiles per persona; a canvas of streamed widgets (pin, remove, expand); a collapsible assistant streaming plan → widgets → summary.</p></div>
+    <div class="card"><div class="ic">Renderer</div><h4>DashboardSpec → ECharts</h4><p>Widget types <code>kpi</code>, <code>bar</code>, <code>stacked_bar</code>, <code>line</code>, <code>heatmap</code>, <code>table</code>, <code>pie</code>, <code>scatter</code>. Zod on the client mirrors Pydantic on the server.</p></div>
+    <div class="card"><div class="ic">Provenance</div><h4>View query · source rows</h4><p>The executed metric / SQL / endpoint call, source system, row count and a paginated row table, fetched by handle.</p></div>
+    <div class="card"><div class="ic">Lineage</div><h4>Context graph dialog</h4><p>The role-gated subgraph behind a widget: metric, dimensions, tables, columns, endpoints, source, terms and past questions.</p></div>
+    <div class="card"><div class="ic">Reasoning</div><h4>How I got this</h4><p>Timeline of steps (nested sub-agent steps indented), tools, durations, notes and touched-node chips that highlight in the graph.</p></div>
+    <div class="card"><div class="ic">Dashboards</div><h4>Saved and re-run</h4><p>Pinned widgets are saved as recipes and re-executed with the current user's access, with no model call.</p></div>
+  </div>
+</section>
+
+<!-- ============ 12 EVALS ============ -->
+<section id="evals">
+  <h2><span class="num">12</span>Evaluation &amp; quality</h2>
+  <div class="two">
+    <div>
+      <h3>Golden questions (30)</h3>
+      <p>Each case runs under its own <code>eval-&lt;id&gt;</code> identity and is graded <b>without an LLM judge</b>:</p>
+      <ul>
+        <li><b>answered:</b> a widget arrived, no error</li>
+        <li><b>routing:</b> the expected metric or source was used</li>
+        <li><b>rows:</b> widget rows equal the reference recipe replayed through the gateway</li>
+        <li><b>story:</b> the planted story holds on the rows</li>
+        <li><b>chart:</b> the widget type is allowed</li>
+      </ul>
+    </div>
+    <div>
+      <h3>Red-team (15)</h3>
+      <p>A case fails on any of four detectors:</p>
+      <ul>
+        <li>an injected-instruction canary or forbidden value in the answer</li>
+        <li>a canary from rows the persona cannot see</li>
+        <li>an out-of-scope row</li>
+        <li>a successful forbidden tool call in <code>app.audit</code></li>
+      </ul>
+    </div>
+  </div>
+  <div class="tw"><table>
+    <thead><tr><th>Command</th><th>What it checks</th></tr></thead>
+    <tbody>
+      <tr><td><code>make eval-check</code></td><td>No model calls: references replay, planted stories hold, canaries readable / hidden as claimed</td></tr>
+      <tr><td><code>make eval</code></td><td>Live: golden + red-team through the agent and the real model, capped by <code>--max-cost-usd</code> (default $5); exits 1 on any leak</td></tr>
+      <tr><td><code>make test</code> / <code>test-fast</code></td><td>Unit and integration suites (scripted model, fake gateway, Dockerised Postgres, Neo4j test namespace), RBAC matrix</td></tr>
+      <tr><td><code>make test-live</code></td><td>Planted stories, persona matrix, handle isolation and every KPI tile through the running stack</td></tr>
+      <tr><td><code>make test-ui</code> / <code>make e2e</code></td><td>Lint, types, vitest; Playwright against a mocked agent (or live)</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<!-- ============ 13 RUNTIME ============ -->
+<section id="runtime">
+  <h2><span class="num">13</span>Runtime &amp; runbook</h2>
+  <div class="tw"><table>
+    <thead><tr><th>Service</th><th>Address</th></tr></thead>
+    <tbody>
+      <tr><td>Next.js UI</td><td><code>http://localhost:3000</code> (the agent's CORS allows only this origin)</td></tr>
+      <tr><td>Agent service</td><td><code>http://127.0.0.1:8000</code> (<code>/healthz</code>)</td></tr>
+      <tr><td>Semantic gateway</td><td><code>http://127.0.0.1:8200/mcp</code></td></tr>
+      <tr><td>Source MCP servers</td><td><code>http://127.0.0.1:8201..8205/mcp</code></td></tr>
+      <tr><td>RefMaster / MarketMaster APIs</td><td><code>http://127.0.0.1:8101/docs</code>, <code>:8102/docs</code></td></tr>
+      <tr><td>Postgres / Neo4j (Docker)</td><td><code>127.0.0.1:5434</code> / <code>127.0.0.1:7688</code></td></tr>
+    </tbody>
+  </table></div>
+  <pre><code>make models                  # once: cache the local embedding model
+scripts/start_backend.sh     # Docker up, seed on first run, load graph if stale, run all services
+scripts/start_frontend.sh    # npm install if needed, serve :3000
+make reseed &amp;&amp; make graph    # regenerate data and reload the context graph
+make distill                 # confirmed answers → query history (after every make graph)</code></pre>
+  <p>Only <code>ANTHROPIC_API_KEY</code> must be supplied (in the git-ignored <code>.env</code>); other secrets are
+  generated on first run, and <code>PRISM_ENV=production</code> refuses every dev default. Without the key the stack
+  still serves KPIs, results and dashboards; <code>/chat</code> answers 503.</p>
+</section>
+
+<!-- ============ 14 AS BUILT ============ -->
+<section id="asbuilt">
+  <h2><span class="num">14</span>As built vs. original design, and roadmap</h2>
+  <div class="tw"><table>
+    <thead><tr><th>Topic</th><th>Original proposal</th><th>As built</th></tr></thead>
+    <tbody>
+      <tr><td>Agent runtime</td><td>Own Messages-API loop behind a <code>Runner</code> interface</td><td>As proposed; deep-agent pattern without a framework library</td></tr>
+      <tr><td>Gateway surface</td><td>4 agent-facing tools</td><td>11 tools; still only 4 offered to the model</td></tr>
+      <tr><td>Escalation to Opus</td><td>On multi-source or low-confidence plans</td><td>On supervisor run limits only</td></tr>
+      <tr><td>History feedback</td><td>Thumbs up / down, hourly distillation, direct replay above a similarity threshold</td><td>Explicit “Correct? Confirm”, manual <code>make distill</code> with multi-caller and sanitising gates; examples only, no replay</td></tr>
+      <tr><td>Knowledge files</td><td><code>semantic/model/*.yaml</code> + entity map</td><td><code>prism/graph/knowledge/{ontology,glossary,history}.yaml</code></td></tr>
+      <tr><td>Cross-system</td><td>Shared keys in the graph</td><td>Plus <code>JOINABLE_ON</code> metric links, <code>metric_links</code> in the pack and the investigation pattern (M9)</td></tr>
+      <tr><td>Added beyond the proposal</td><td>—</td><td>Context-graph lineage view (M7), reasoning traces (M8), cross-system incident (M9)</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>Milestones delivered</h3>
+  <p>M1 simulated platforms · M2 source MCP servers · M3 context graph + gateway · M4 agent service · M5 UI ·
+  M6 evals + human verification · M7 context-graph view · M8 reasoning traces · M9 cross-system incident.</p>
+
+  <h3>Roadmap</h3>
+  <ul>
+    <li>Full semantic-layer “model map” view: type-level graph linked to instances, with an answer's path highlighted.</li>
+    <li>The remaining escalation triggers (multi-source, low confidence) and precedent search over past traces.</li>
+    <li>Parallel per-source delegation along an incident chain (hops are sequential today).</li>
+    <li>Real SSO / OIDC with RFC 8693 token exchange; cloud deployment; model access via a managed cloud provider by configuration.</li>
+    <li>Exposing the same gateway as a customer-facing MCP server, unchanged.</li>
+    <li>Code-execution sandbox for heavy data wrangling (phase 2 option).</li>
+  </ul>
+  <div class="note">Out of scope for the MVP: point-in-time history, a warehouse, regulatory reporting and write-back
+  actions (assign a break, approve a price).</div>
+</section>
+
+</main>
+</div>
+
+<script>
+(function () {
+  // Mobile contents mirror the sidebar
+  var toc = document.getElementById('toc');
+  var mtoc = document.getElementById('mtoc');
+  if (toc && mtoc) {
+    mtoc.innerHTML = toc.innerHTML;
+    mtoc.addEventListener('click', function (e) {
+      if (e.target.tagName === 'A') { var d = mtoc.closest('details'); if (d) d.open = false; }
+    });
+  }
+  // Scroll spy
+  var links = Array.prototype.slice.call(document.querySelectorAll('#toc a'));
+  var byId = {};
+  links.forEach(function (a) { byId[a.getAttribute('href').slice(1)] = a; });
+  var targets = Object.keys(byId).map(function (id) { return document.getElementById(id); }).filter(Boolean);
+  function update() {
+    var y = window.scrollY + 120, current = targets[0];
+    targets.forEach(function (t) { if (t.getBoundingClientRect().top + window.scrollY <= y) current = t; });
+    if ((window.innerHeight + window.scrollY) >= document.body.scrollHeight - 4) current = targets[targets.length - 1];
+    links.forEach(function (a) { a.classList.remove('active'); });
+    if (current && byId[current.id]) byId[current.id].classList.add('active');
+  }
+  window.addEventListener('scroll', update, { passive: true });
+  update();
+  // Theme toggle (remembered per browser when storage is available)
+  var root = document.documentElement;
+  try { var saved = localStorage.getItem('prism-arch-theme'); if (saved) root.setAttribute('data-theme', saved); } catch (e) {}
+  document.getElementById('themeBtn').addEventListener('click', function () {
+    var cur = root.getAttribute('data-theme');
+    if (!cur) cur = 'light';
+    var next = cur === 'dark' ? 'light' : 'dark';
+    root.setAttribute('data-theme', next);
+    try { localStorage.setItem('prism-arch-theme', next); } catch (e) {}
+  });
+})();
+</script>
+</body>
+</html>
