@@ -1,11 +1,14 @@
 """M9 cross-system incident (spec 2026-10-03): ids, every link of the chain, noise, determinism, isolation."""
 import copy
+from collections import Counter
+from datetime import UTC, date, datetime
+from datetime import time as dtime
 
 import pytest
 
-from prism.sim.incident import (CA_FEED_TYPE, FAILED_FROM_END, FIX_FROM_END, NOISE_CORPORATE_ACTIONS, NOISE_SPIKES,
-                                SPLIT_FROM_END, _next_id, apply_incident)
-from prism.sim.keys import fund_entity_id
+from prism.sim.incident import (CA_FEED_TYPE, CASH_FROM_END, FAILED_FROM_END, FIX_FROM_END, NOISE_CASH_IN_LIEU,
+                                NOISE_CORPORATE_ACTIONS, NOISE_SPIKES, SPLIT_FROM_END, _next_id, apply_incident, owned)
+from prism.sim.keys import fund_cash_account_id, fund_entity_id
 from prism.sim.model import TableData
 from prism.sim.seed import PROJECTORS
 from prism.sim.universe import (INCIDENT_ANCHOR, INCIDENT_MIN_HALF_WEIGHT_BPS, INCIDENT_SPLIT_FROM_END, SimConfig,
@@ -200,3 +203,108 @@ def test_split_days_raise_one_closed_corporate_action_exception_per_holder(after
             assert run["unmatched"] == len(_rows(after, "assetrecon", "recon_exceptions", run_id=x["run_id"]))
             (nav_run,) = _rows(after, "assetrecon", "recon_runs", portfolio_id=pid, recon_type="nav", business_date=d)
             assert (nav_run["matched"], nav_run["unmatched"]) == (0, 1)
+
+
+def test_cash_in_lieu_lands_on_the_anchor_fund_account_unmatched(after, universe):
+    inc, n = universe.stories.incident, len(universe.days)
+    anchor = next(k for k, p in enumerate(universe.portfolios) if p.portfolio_id == inc.anchor_portfolio_id)
+    account = fund_cash_account_id(universe.cfg.n_cash_accounts, anchor)
+    (acc,) = _rows(after, "cashrecon", "private.cash_accounts", account_id=account)
+    assert acc["legal_entity_id"] == fund_entity_id(universe.cfg.n_entities, anchor)
+    (brk,) = _rows(after, "cashrecon", "breaks", break_type="cash_in_lieu", status="open")
+    day = universe.days[n - CASH_FROM_END]
+    assert (brk["account_id"], brk["legal_entity_id"], brk["opened_on"], brk["bank_source_id"]) == \
+        (account, acc["legal_entity_id"], day, acc["bank_source_id"])
+    (entry,) = [r for r in _rows(after, "cashrecon", "statement_entries", account_id=account)
+                if r["reference"].startswith("CIL-")]
+    assert entry["amount"] == brk["amount"] and entry["value_date"] == day
+    assert not _rows(after, "cashrecon", "ledger_entries", reference=entry["reference"])
+
+
+def test_other_cash_in_lieu_payments_match_their_ledger(after, universe):
+    inc = universe.stories.incident
+    noise = [r for r in after["cashrecon"]["statement_entries"].dicts()
+             if r["reference"].startswith("CIL-") and r["reference"].split("-")[2] != _anchor_account(universe)]
+    assert len(noise) == NOISE_CASH_IN_LIEU
+    items = after["cashrecon"]["match_items"].dicts()
+    for e in noise:
+        (ledger,) = _rows(after, "cashrecon", "ledger_entries", reference=e["reference"])
+        assert ledger["amount"] == e["amount"]
+        stmt_match = {r["match_id"] for r in items if r["entry_id"] == e["entry_id"]}
+        ledger_match = {r["match_id"] for r in items if r["entry_id"] == ledger["entry_id"]}
+        assert stmt_match and stmt_match == ledger_match
+    assert len(_rows(after, "cashrecon", "breaks", break_type="cash_in_lieu")) == 1
+    assert not {e["account_id"] for e in noise} & {fund_cash_account_id(universe.cfg.n_cash_accounts, k)
+                                                   for k, p in enumerate(universe.portfolios)
+                                                   if p.portfolio_id in inc.holder_ids}
+
+
+def _anchor_account(universe):
+    inc = universe.stories.incident
+    anchor = next(k for k, p in enumerate(universe.portfolios) if p.portfolio_id == inc.anchor_portfolio_id)
+    return fund_cash_account_id(universe.cfg.n_cash_accounts, anchor)
+
+
+def test_the_pass_only_appends_or_edits_owned_rows(before, after, universe):
+    edited = Counter()
+    for db, tables in before.items():
+        for name, t in tables.items():
+            a = after[db][name]
+            assert a.columns == t.columns and len(a.rows) >= len(t.rows), f"{db}.{name}"
+            for old, new in zip(t.rows, a.rows):
+                if old != new:
+                    assert owned(universe, db, name, dict(zip(t.columns, old))), (db, name, old)
+                    edited[f"{db}.{name}"] += 1
+    assert {"assetrecon.nav_checks", "assetrecon.internal_positions", "marketmaster.golden_prices"} <= set(edited)
+
+
+def test_incident_pass_is_deterministic(universe, after):
+    again = {db: project(universe) for db, project in PROJECTORS.items()}
+    apply_incident(universe, again)
+    assert all(again[db][name].rows == after[db][name].rows for db in after for name in after[db])
+
+
+def test_incident_rows_never_happen_after_as_of(after, before, universe):
+    future_ok = {"settle_date", "pay_date", "ex_date", "sla_due"}
+    end = datetime.combine(universe.cfg.as_of, dtime(23, 59, 59), tzinfo=UTC)
+    for db, tables in after.items():
+        for name, t in tables.items():
+            for row in t.rows[len(before[db][name].rows):]:
+                for col, v in zip(t.columns, row):
+                    if col in future_ok:
+                        continue
+                    if isinstance(v, datetime):
+                        assert v <= end, (db, name, col, v)
+                    elif isinstance(v, date):
+                        assert v <= universe.cfg.as_of, (db, name, col, v)
+
+
+def test_scaled_profile_still_gets_a_complete_incident():
+    u = build_universe(SimConfig.small(scale=1.5))
+    tables = {db: project(u) for db, project in PROJECTORS.items()}
+    apply_incident(u, tables)
+    inc = u.stories.incident
+    assert _rows(tables, "refmaster", "corporate_actions", status="pending", security_id=inc.security_id)
+    assert _rows(tables, "cashrecon", "breaks", break_type="cash_in_lieu")
+    assert _rows(tables, "assetrecon", "recon_exceptions", cause_code="corporate_action")
+    assert _rows(tables, "marketmaster", "price_suspects", status="accepted")
+    assert _rows(tables, "feedhub", "feed_deliveries", feed_type=CA_FEED_TYPE, status="late")
+
+
+@pytest.mark.slow
+def test_full_profile_keeps_every_planted_story():
+    u = build_universe(SimConfig())
+    tables = {db: project(u) for db, project in PROJECTORS.items()}
+    apply_incident(u, tables)
+    n, st = len(u.days), u.stories
+    since = u.days[n - 6]
+    late = Counter(r["source_id"] for r in tables["feedhub"]["feed_deliveries"].dicts()
+                   if r["status"] != "on_time" and r["business_date"] >= since)
+    assert late.most_common(1)[0][0] == st.late_custodian_source_id
+    aged = Counter(r["legal_entity_id"] for r in tables["cashrecon"]["breaks"].dicts()
+                   if r["status"] != "closed" and r["age_days"] > 5 and r["ccy"] == "USD")
+    assert aged.most_common(1)[0][0] == st.usd_break_entity_id
+    for pid in u.stories.incident.holder_ids:                     # every holder breaches on both split days
+        for i in (n - SPLIT_FROM_END, n - SPLIT_FROM_END + 1):
+            (nav,) = _rows(tables, "assetrecon", "nav_checks", portfolio_id=pid, nav_date=u.days[i])
+            assert abs(nav["diff_bps"]) > 5

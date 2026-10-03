@@ -18,13 +18,14 @@ from datetime import time, timedelta
 
 from prism.sim.calendar import at
 from prism.sim.ids import make_lei
-from prism.sim.keys import delivery_id, feed_id, fund_cash_account_id, fund_entity_id
+from prism.sim.keys import delivery_id, feed_id, fund_cash_account_id, fund_entity_id, statement_format
 from prism.sim.model import TableData
 from prism.sim.project_assetrecon import INV_OPS
+from prism.sim.project_cashrecon import ops_users
 from prism.sim.project_marketmaster import STAGES
 from prism.sim.project_refmaster import STEWARDS
 from prism.sim.universe import (INCIDENT_SPLIT_FROM_END, LEGAL_SUFFIX, REGION_OF, VENDOR_COVERAGE, VENDOR_RANK, VENDORS,
-                                Incident, Universe)
+                                CashAccount, Incident, Universe)
 
 FAILED_FROM_END = 6                    # 23 Sep for the default as-of: the corporate-actions delivery fails
 SPLIT_FROM_END = INCIDENT_SPLIT_FROM_END   # 24 Sep: the split is effective; that day's delivery is late
@@ -258,11 +259,67 @@ def _assetrecon(u: Universe, inc: Incident, t: dict[str, TableData]) -> None:
                  diff_bps=round((internal - r["admin_nav"]) / r["admin_nav"] * 1e4, 3))
 
 
+# ----------------------------------------------------------------------------------------------- cashrecon
+_CASH_IDS = {"statement": ("statements", "stmt_id", "ST", 7), "entry": ("statement_entries", "entry_id", "STE", 7),
+             "ledger": ("ledger_entries", "entry_id", "LGE", 7), "match": ("match_groups", "match_id", "M", 7),
+             "break": ("breaks", "break_id", "BRK", 6), "action": ("break_actions", "action_id", "BA", 7)}
+
+
+def _statement(rng, t, nid, a: CashAccount, d, amount: float, security_id: str) -> tuple[str, str]:
+    """One statement for the day with a single credit: cash paid for fractional shares after a corporate action."""
+    stmt, entry = nid["statement"](), nid["entry"]()
+    ref = f"CIL-{security_id}-{a.account_id}-{d:%Y%m%d}"
+    opening = round(rng.uniform(1e6, 5e7), 2)
+    t["statements"].add(stmt, a.account_id, statement_format(a.bank_source_id), 1, d, opening,
+                        round(opening + amount, 2), a.region)
+    t["statement_entries"].add(entry, stmt, a.account_id, d, amount, "C", ref, f"Cash in lieu {security_id}", a.region)
+    return ref, entry
+
+
+def _cashrecon(u: Universe, inc: Incident, rng: random.Random, t: dict[str, TableData]) -> None:
+    n = len(u.days)
+    banks = [s for s in u.sources if s.source_type == "bank"]
+    accounts: dict[str, CashAccount] = {}
+    for k, p in enumerate(u.portfolios):            # one fund cash account per portfolio, owned by its fund entity
+        bank = rng.choice(banks)
+        nostro = "".join(rng.choice("0123456789") for _ in range(12))
+        a = CashAccount(fund_cash_account_id(u.cfg.n_cash_accounts, k), fund_entity_id(u.cfg.n_entities, k),
+                        bank.source_id, bank.bic, nostro, p.base_ccy, p.region)
+        t["private.cash_accounts"].add(a.account_id, a.legal_entity_id, a.bank_source_id, a.bank_bic, a.nostro_no,
+                                       a.ccy, a.region)
+        accounts[p.portfolio_id] = a
+    nid = {name: _next_id(t[table], col, prefix, width) for name, (table, col, prefix, width) in _CASH_IDS.items()}
+    a, d = accounts[inc.anchor_portfolio_id], u.days[n - CASH_FROM_END]
+    amount = round(rng.uniform(150, 2_500), 2)
+    _statement(rng, t, nid, a, d, amount, inc.security_id)          # no ledger entry: an open break
+    owner, brk = ops_users(a.region)[0], nid["break"]()
+    t["breaks"].add(brk, a.account_id, a.legal_entity_id, "cash_in_lieu", amount, a.ccy, d, (u.cfg.as_of - d).days,
+                    "open", owner, None, a.region, a.bank_source_id)
+    opened = at(d, 20)
+    t["break_actions"].add(nid["action"](), brk, "opened", "system", opened, None, a.region)
+    t["break_actions"].add(nid["action"](), brk, "assigned", "system", opened + timedelta(minutes=5),
+                           f"Assigned to {owner}", a.region)
+    equities = sorted(s.security_id for s in u.securities_by_class["Equity"]
+                      if s.status == "active" and s.security_id != inc.security_id)
+    others = [pid for pid in sorted(accounts) if pid not in inc.holder_ids]
+    for pid in rng.sample(others, min(NOISE_CASH_IN_LIEU, len(others))):   # matched, so no break
+        a, d = accounts[pid], u.days[rng.randrange(n - 10, n - 1)]
+        amount = round(rng.uniform(150, 2_500), 2)
+        ref, entry = _statement(rng, t, nid, a, d, amount, rng.choice(equities))
+        ledger, match = nid["ledger"](), nid["match"]()
+        t["ledger_entries"].add(ledger, a.account_id, f"GL-{a.ccy}-1500", amount, "C", d, ref, a.region)
+        t["match_groups"].add(match, "MR01", "auto", at(d, 19, 30), "system", a.region)
+        t["match_items"].add(match, "ledger", ledger, a.region)
+        t["match_items"].add(match, "statement", entry, a.region)
+
+
 # ----------------------------------------------------------------------------------------------- entry point
 def apply_incident(u: Universe, tables: dict[str, dict[str, TableData]]) -> None:
+    """Plant the incident into the projected tables in place (spec §2.5): appends, plus edits of `owned` rows only."""
     inc = u.stories.incident
     rng = random.Random(u.cfg.seed + 6)
     _refmaster(u, inc, rng, tables["refmaster"])
     _feedhub(u, inc, rng, tables["feedhub"])
     _marketmaster(u, inc, rng, tables["marketmaster"])
     _assetrecon(u, inc, tables["assetrecon"])
+    _cashrecon(u, inc, rng, tables["cashrecon"])
