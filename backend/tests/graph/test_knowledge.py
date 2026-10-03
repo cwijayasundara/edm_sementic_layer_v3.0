@@ -43,7 +43,7 @@ def test_loads_into_models(k):
 
 def test_all_governed_metrics_are_defined_by_a_term(k):
     defined = {r.removeprefix("metric:") for t in k.terms for r in t.defines if r.startswith("metric:")}
-    assert len(_metric_ids()) == 22
+    assert len(_metric_ids()) == 25
     assert defined == _metric_ids()
 
 

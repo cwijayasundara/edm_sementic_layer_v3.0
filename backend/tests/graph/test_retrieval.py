@@ -224,12 +224,11 @@ def test_issuer_country_join_path(pack, persona):
     paths = [j for j in p["join_paths"] if j["from"] == "price_conflicts" and "refmaster.legal_entities" in j["tables"]]
     assert paths, p["join_paths"]
     j = paths[0]
-    chain = ["marketmaster.price_suspects", "marketmaster.instruments", "refmaster.securities",
-             "refmaster.legal_entities"]
+    chain = ["marketmaster.price_suspects", "refmaster.securities", "refmaster.legal_entities"]
     assert [t for t in j["tables"] if t in chain] == chain
     # a join condition is symmetric; REFERENCES and SAME_KEY_AS can tie on the shortest path in either direction
     on = {frozenset(c.split(" = ")) for c in j["on"]}
-    assert {"refmaster.securities.security_id", "marketmaster.instruments.security_id"} in on
+    assert {"refmaster.securities.security_id", "marketmaster.price_suspects.security_id"} in on
     assert {"refmaster.securities.issuer_entity_id", "refmaster.legal_entities.entity_id"} in on
 
 

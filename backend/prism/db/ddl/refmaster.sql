@@ -44,7 +44,7 @@ CREATE TABLE corporate_actions (
   pay_date date NOT NULL,
   ratio numeric(12, 6),
   status text NOT NULL,
-  issuer_entity_id text REFERENCES legal_entities (entity_id)
+  issuer_entity_id text
 );
 CREATE TABLE dq_rules (rule_id text PRIMARY KEY, domain text NOT NULL, name text NOT NULL, severity text NOT NULL);
 CREATE TABLE exceptions (

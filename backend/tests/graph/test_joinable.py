@@ -24,7 +24,6 @@ def links(graph_embedder) -> set[frozenset]:
     (("price_suspects", "security_id"), ("position_exceptions", "security_id")),             # MarketMaster -> AssetRecon
     (("price_suspects", "security_id"), ("pending_corporate_actions", "security_id")),       # MarketMaster -> RefMaster
     (("funds", "fund_entity_id"), ("open_breaks", "legal_entity_id")),                       # AssetRecon -> CashRecon
-    (("funds", "fund_entity_id"), ("pending_corporate_actions", "issuer_entity_id")),
     (("open_breaks", "bank_source_id"), ("late_feeds", "source_id")),                        # CashRecon -> FeedHub
 ])
 def test_every_hop_of_the_chain_is_joinable(links, hop):

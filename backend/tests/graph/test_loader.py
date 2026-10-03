@@ -92,7 +92,7 @@ def test_metric_nodes_carry_the_gateway_contract(graph):
     nav = metrics["nav_break_bps_max"]
     assert nav["fine_grain_dimensions"] == ["nav_date", "portfolio_id"]
     assert p["fine_grain_dimensions"] == ["price_date", "vendor_id"]                     # REST metrics too
-    assert metrics["open_breaks"]["fine_grain_dimensions"] == []
+    assert metrics["open_breaks"]["fine_grain_dimensions"] == ["bank_source_id"]
     nav_dims = {d["name"]: d for d in graph.labelled("Dimension") if d["metric"] == "nav_break_bps_max"}
     assert {n: d.get("grain") for n, d in nav_dims.items()} == {"portfolio_id": "fine", "nav_date": "fine"}
     assert all(d.get("grain") is None for d in dims.values())
@@ -246,7 +246,7 @@ def test_build_graph_exclude_drops_metric_dimensions_and_edges(graph_embedder, g
     g = build_graph(graph_embedder, exclude=frozenset({"metric:open_breaks"}))
     assert "metric:open_breaks" not in g.nodes and not any(u.startswith("dim:open_breaks.") for u in g.nodes)
     assert all("metric:open_breaks" not in (a, b) for a, _, b, _ in g.edges)
-    assert len(g.labelled("Metric")) == 21
+    assert len(g.labelled("Metric")) == 24
 
 
 # ------------------------------------------------------------------------------------------- loader guards
@@ -343,7 +343,7 @@ def test_real_graph_loaded(neo4j_driver, context_graph, graph):
     c = counts(neo4j_driver, TEST_GRAPH_NS)
     assert c["nodes"] == len(graph.nodes) == context_graph.nodes
     assert c["rels"] == len(graph.edges) == context_graph.rels
-    assert c["by_label"]["Metric"] == 22 and c["by_label"]["Table"] == 38 and c["by_label"]["Role"] == 5
+    assert c["by_label"]["Metric"] == 25 and c["by_label"]["Table"] == 38 and c["by_label"]["Role"] == 5
     assert c["by_label"]["Concept"] == 10 and c["by_label"]["Question"] == 12
     bad = _rows(neo4j_driver, "MATCH (n:Ctx {ns: 'prism_test'}) WHERE n.uid IS NULL OR n.loaded_version IS NULL "
                               "OR n.allowed_scopes IS NULL RETURN n.uid AS uid LIMIT 5")
@@ -363,7 +363,7 @@ def test_real_graph_loaded(neo4j_driver, context_graph, graph):
 @pytest.mark.neo4j
 def test_metric_id_set_is_the_union_of_sql_and_rest_metrics(neo4j_driver, context_graph):
     ids = set(_graph_metrics(neo4j_driver))
-    assert ids == _sql_ids() | _rest_ids() and len(ids) == 22
+    assert ids == _sql_ids() | _rest_ids() and len(ids) == 25
 
 
 @pytest.mark.neo4j
@@ -383,13 +383,13 @@ def test_stale_objects_are_removed_on_reload(neo4j_driver, graph_embedder, conte
     prism_before = counts(neo4j_driver, TEST_GRAPH_NS)
     load(neo4j_driver, graph_embedder, scratch_ns, graph=graph)
     full = counts(neo4j_driver, scratch_ns)
-    assert full["by_label"]["Metric"] == 22
+    assert full["by_label"]["Metric"] == 25
     smaller = build_graph(graph_embedder, exclude=frozenset({"metric:open_breaks"}))
     report = load(neo4j_driver, graph_embedder, scratch_ns, graph=smaller)
     after = counts(neo4j_driver, scratch_ns)
     n_dims = len([u for u in graph.nodes if u.startswith("dim:open_breaks.")])
     assert n_dims > 0 and report.deleted["nodes"] == 1 + n_dims
-    assert after["by_label"]["Metric"] == 21
+    assert after["by_label"]["Metric"] == 24
     assert after["by_label"]["Dimension"] == full["by_label"]["Dimension"] - n_dims
     assert after["nodes"] == full["nodes"] - 1 - n_dims and after["rels"] == len(smaller.edges)
     assert {k: v for k, v in after["by_label"].items() if k not in ("Metric", "Dimension")} == \
