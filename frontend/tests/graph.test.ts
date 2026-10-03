@@ -125,6 +125,10 @@ describe("layeredPositions", () => {
   it("a big graph draws smaller nodes and hides colliding names; a small one does not", () => {
     expect(nodeScale(layeredPositions(g))).toBe(1);
     expect(nodeScale(layeredPositions(many(150)))).toBeLessThan(1);
+    expect(nodeScale(layeredPositions(g), { width: 320, height: 400 })).toBeLessThan(0.5);
+    const phone = (toGraphOption(g, { viewport: { width: 300, height: 500 } }) as any).series[0];
+    expect(phone.edgeLabel.show).toBe(false);
+    expect(phone.labelLayout).toEqual({ hideOverlap: true });
     const big = (toGraphOption(many(150)) as any).series[0];
     expect(big.data[0].symbolSize).toBeLessThan(NODE_SIZE.Column);
     expect((toGraphOption(g) as any).series[0].labelLayout).toBeUndefined();

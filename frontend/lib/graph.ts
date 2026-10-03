@@ -64,6 +64,8 @@ export const edgeText = (type: string) => type.toLowerCase().replace(/_/g, " ");
 export const EDGE_LABEL_MAX = 40;
 /** Above this many nodes, node names that overlap are hidden (zoom in or hover to read them). */
 export const DENSE_NODES = 30;
+/** Below this chart width (px), the graph is drawn as for a dense one. */
+export const NARROW_WIDTH = 500;
 
 const NAVY = "#14213d", NEUTRAL = "#5a6478";
 
@@ -174,27 +176,34 @@ export function layeredPositions(g: Lineage): Map<string, { x: number; y: number
   return pos;
 }
 
-const FIT_W = 760, FIT_H = 430, FIT_FULL = 0.75;
+export type Viewport = { width: number; height: number };
+/** The dialog's usual desktop graph pane, used until the chart has been measured. */
+export const DEFAULT_VIEWPORT: Viewport = { width: 950, height: 540 };
+// ECharts fits a fixed layout into 80% of the chart; nodes are full size down to this fitted scale
+const FIT_SHARE = 0.8, FIT_FULL = 0.75;
 
 /** ECharts fits the positions to the chart but draws symbols at their own pixel size (only a user zoom rescales
- *  them), so a graph whose layout will be shrunk a lot to fit draws its nodes smaller by the same factor. 1 for a
- *  graph that fits at about the scale the sizes were chosen for. Estimated for the dialog's usual graph pane. */
-export function nodeScale(pos: Map<string, { x: number; y: number }>): number {
+ *  them), so a graph whose layout will be shrunk a lot to fit (a big graph, or a phone) draws its nodes smaller by
+ *  the same factor. 1 for a graph that fits at about the scale the sizes were chosen for. */
+export function nodeScale(pos: Map<string, { x: number; y: number }>, viewport: Viewport = DEFAULT_VIEWPORT): number {
   const xs = [...pos.values()].map((p) => p.x), ys = [...pos.values()].map((p) => p.y);
   const w = Math.max(...xs) - Math.min(...xs) || 1, h = Math.max(...ys) - Math.min(...ys) || 1;
-  return Math.max(0.25, Math.min(1, Math.min(FIT_W / w, FIT_H / h) / FIT_FULL));
+  const fit = Math.min((FIT_SHARE * viewport.width) / w, (FIT_SHARE * viewport.height) / h);
+  return Math.max(0.2, Math.min(1, fit / FIT_FULL));
 }
 
 /** Lineage -> one ECharts graph laid out in kind bands, one legend category per origin. Node `name` is the node id (ECharts links
  *  resolve by name). Fill and icon tell the kind; the ring and legend tell the source system. */
-export function toGraphOption(g: Lineage, opts: { highlight?: Set<string> } = {}): EChartsOption {
+export function toGraphOption(g: Lineage, opts: { highlight?: Set<string>; viewport?: Viewport } = {}): EChartsOption {
   const origins = [...sourcesUsed(g).map(({ id, name, hex }) => ({ id, name, hex })),
     ...(g.nodes.some((n) => nodeOrigin(n) === PRISM_ORIGIN) ? [PRISM_ORIGIN] : [])];
   const category = (n: LineageNode) => origins.findIndex((o) => o.id === nodeOrigin(n).id);
-  const edgeLabels = g.edges.length <= EDGE_LABEL_MAX;
+  // a phone-width pane has no room for edge names or every node name: they show on hover and zoom instead
+  const narrow = (opts.viewport ?? DEFAULT_VIEWPORT).width < NARROW_WIDTH;
+  const edgeLabels = !narrow && g.edges.length <= EDGE_LABEL_MAX;
   const pos = layeredPositions(g);
-  const dense = g.nodes.length > DENSE_NODES;
-  const scale = nodeScale(pos);
+  const dense = narrow || g.nodes.length > DENSE_NODES;
+  const scale = nodeScale(pos, opts.viewport);
   const rankOf = new Map(g.nodes.map((n) => [n.id, KIND_RANK[n.kind]]));
   return {
     tooltip: { formatter: (p: any) => (p.dataType === "edge" ? escapeHtml(edgeText(p.data.type))
