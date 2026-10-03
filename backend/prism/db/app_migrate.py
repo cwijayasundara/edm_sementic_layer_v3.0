@@ -109,6 +109,9 @@ MIGRATIONS: tuple[tuple[int, str], ...] = (
         UPDATE app.query_log SET metric_backed = verified, verified = false WHERE record_id IS NULL;
         CREATE UNIQUE INDEX IF NOT EXISTS query_log_record_id ON app.query_log (record_id);
     """),
+    (6, """
+        ALTER TABLE public.seed_info ADD COLUMN IF NOT EXISTS incident jsonb;
+    """),
 )
 
 APP_TABLES = ("audit", "query_log", "agent_runs", "saved_dashboards")

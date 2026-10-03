@@ -4,8 +4,9 @@ import sys
 import time
 
 from prism.config import APP_DB, LOGICAL_DBS, ConfigError, load_settings
+from prism.sim.incident import incident_record
 from prism.sim.seed import is_seeded, seed_all
-from prism.sim.universe import SimConfig
+from prism.sim.universe import SimConfig, build_universe
 
 CHECK_SEEDED, CHECK_NOT_SEEDED, CHECK_ERROR = 0, 1, 2
 
@@ -50,6 +51,9 @@ def main(argv: list[str] | None = None) -> int:
     counts = seed_all(settings, cfg)
     for db, tables in counts.items():
         print(f"{db}: " + ", ".join(f"{name}={n}" for name, n in tables.items()))
+    inc = incident_record(build_universe(cfg))
+    print(f"Incident: {inc['security_id']} (issuer {inc['issuer_entity_id']}) via {inc['source_id']}; "
+          f"anchor {inc['anchor_portfolio_id']} -> {inc['fund_entity_id']}; holders {', '.join(inc['holder_ids'])}")
     print(f"Seeded ({cfg.profile}) in {time.monotonic() - started:.1f}s")
     return 0
 

@@ -1,8 +1,11 @@
 """Create every platform database and load it from one shared universe."""
 import psycopg
+from psycopg.types.json import Jsonb
 
 from prism.config import APP_DB, Settings
 from prism.db.migrate import migrate
+from prism.sim.incident import apply_incident, incident_record
+from prism.sim.model import TableData
 from prism.sim.project_assetrecon import project_assetrecon
 from prism.sim.project_cashrecon import project_cashrecon
 from prism.sim.project_feedhub import project_feedhub
@@ -20,16 +23,23 @@ PROJECTORS = {
 }
 
 
+def project_all(universe) -> dict[str, dict[str, TableData]]:
+    """Every platform's tables, then the cross-system incident pass over all of them (M9 spec §2.5)."""
+    tables = {db: project(universe) for db, project in PROJECTORS.items()}
+    apply_incident(universe, tables)
+    return tables
+
+
 def seed_all(settings: Settings, cfg: SimConfig) -> dict[str, dict[str, int]]:
     """Re-create the source databases and load them. `app` survives; its seed marker is written last."""
     migrate(settings)  # clears the seed marker before dropping anything
     universe = build_universe(cfg)
-    counts = {db: write_tables(settings, db, project(universe)) for db, project in PROJECTORS.items()}
+    counts = {db: write_tables(settings, db, tables) for db, tables in project_all(universe).items()}
     with psycopg.connect(settings.dsn(APP_DB, admin=True)) as conn:
-        conn.execute("""INSERT INTO seed_info (seed, as_of, profile) VALUES (%s, %s, %s)
+        conn.execute("""INSERT INTO seed_info (seed, as_of, profile, incident) VALUES (%s, %s, %s, %s)
                         ON CONFLICT (id) DO UPDATE SET seed = EXCLUDED.seed, as_of = EXCLUDED.as_of,
-                          profile = EXCLUDED.profile, seeded_at = now()""",
-                     (cfg.seed, cfg.as_of, cfg.profile))
+                          profile = EXCLUDED.profile, incident = EXCLUDED.incident, seeded_at = now()""",
+                     (cfg.seed, cfg.as_of, cfg.profile, Jsonb(incident_record(universe))))
     return counts
 
 
