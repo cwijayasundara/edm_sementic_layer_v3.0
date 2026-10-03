@@ -263,6 +263,13 @@ curl -sN -XPOST localhost:8000/chat -H "Authorization: Bearer $T" -H 'content-ty
   persona matrix and handle isolation, and asserts every KPI tile in `backend/prism/agent/kpis.yaml` answers for its
   persona. Live runs write smoke rows into the real app database (`app.audit_log`, `app.agent_runs`, `app.query_log`).
 
+**Cross-system incident (M9).** A 2-for-1 split on `SEC001982` (issuer `LE00364`) runs through all five systems:
+SRC005's corporate-actions feed fails on 23 Sep and is late on 24 Sep (FeedHub); the split stays `pending` with an
+open DQ exception (RefMaster); the halved price is accepted as a `spike` (MarketMaster); PF003, PF019, PF021 and
+PF025 breach NAV tolerance on 24-25 Sep with `corporate_action` exceptions (AssetRecon); and a cash-in-lieu payment
+lands unmatched on PF003's fund account `CA0063` on 29 Sep (CashRecon). The semantic layer links the systems with
+`JOINABLE_ON` metric edges (`metric_links` in `search_context`); the three `incident_*` golden cases replay it.
+
 ## UI (M5)
 How to start and use it: see "Run the app" above.
 
