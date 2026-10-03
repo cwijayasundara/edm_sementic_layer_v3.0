@@ -76,7 +76,7 @@ describe("ContextGraphDialog", () => {
     open();
     await userEvent.click(await screen.findByTestId("graph"));
     expect(screen.getByText("Open cash breaks")).toBeInTheDocument();
-    expect(screen.getByText(/PROVIDES/)).toBeInTheDocument();
+    expect(screen.getByText(/provides/)).toBeInTheDocument();
     expect(screen.getByText("From Prism knowledge")).toBeInTheDocument();
   });
 

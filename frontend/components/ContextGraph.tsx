@@ -9,7 +9,7 @@ import type { Lineage } from "@/lib/schemas";
 registerPrismTheme(echarts, getComputedStyle(document.body).fontFamily);
 
 /** `focusSource` shows only one origin's nodes by toggling legend categories through dispatchAction, not the option:
- *  a new option would restart the force layout. */
+ *  a new option would put back nodes the user has dragged. */
 export function ContextGraph({ lineage, onSelect, height, highlight, focusSource }:
   { lineage: Lineage; onSelect: (id: string) => void; height: number | string; highlight?: Set<string>;
     focusSource?: string | null }) {

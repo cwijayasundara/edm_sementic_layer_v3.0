@@ -9,8 +9,8 @@ import { useSession } from "@/components/SessionProvider";
 import { ReasoningTimeline } from "@/components/ReasoningTimeline";
 import { ApiError, Unauthorized, api } from "@/lib/api";
 import { EXPIRED_TEXT } from "@/lib/copy";
-import { KIND_LABEL, SHAPE_KEY, type SourceUse, originText, sourcesUsed } from "@/lib/graph";
-import { LINEAGE_KINDS, type Lineage, type Trace } from "@/lib/schemas";
+import { KIND_LABEL, KIND_STYLE, type SourceUse, edgeText, originText, sourcesUsed } from "@/lib/graph";
+import { LINEAGE_KINDS, type Lineage, type LineageKind, type Trace } from "@/lib/schemas";
 import { touchedIds } from "@/lib/trace";
 
 const ContextGraph = dynamic(() => import("@/components/ContextGraph").then((m) => m.ContextGraph),
@@ -166,11 +166,11 @@ function Body({ load, layout, selected, onSelect, highlight, focusSource, onFocu
               {node.detail && <p className="break-words text-muted-foreground">{node.detail}</p>}
               {links.length > 0 && <ul className="space-y-1 border-t pt-2 text-xs">
                 {links.map((e) => <li key={`${e.from}|${e.type}|${e.to}`} className="break-words">
-                  {e.from === node.id ? `${e.type} → ${labelOf(e.to)}` : `${labelOf(e.from)} → ${e.type}`}</li>)}
+                  {e.from === node.id ? `${edgeText(e.type)} → ${labelOf(e.to)}` : `${labelOf(e.from)} → ${edgeText(e.type)}`}</li>)}
               </ul>}
             </div>
           ) : <p className="text-muted-foreground">Select a node to see what it is, where it came from and how it connects.</p>}
-          <ShapeKey />
+          <KindKey kinds={LINEAGE_KINDS.filter((k) => g.nodes.some((n) => n.kind === k))} />
         </aside>
       </div>
       <details className="rounded-lg border px-3 py-2 text-sm">
@@ -211,27 +211,21 @@ function SourceStrip({ uses, focus, onFocus }:
   );
 }
 
-const SHAPE_PATH: Record<string, React.ReactNode> = {
-  circle: <circle cx="6" cy="6" r="5" />,
-  roundRect: <rect x="1" y="2" width="10" height="8" rx="2.5" />,
-  rect: <rect x="1.5" y="1.5" width="9" height="9" />,
-  triangle: <path d="M6 1 L11 11 L1 11 Z" />,
-  diamond: <path d="M6 0.5 L11.5 6 L6 11.5 L0.5 6 Z" />,
-  pin: <path d="M6 11.5 C6 11.5 1.5 7 1.5 4.5 A4.5 4.5 0 0 1 10.5 4.5 C10.5 7 6 11.5 6 11.5 Z" />,
-};
-
-/** Colour is the source system, so the node kind is read from its shape. */
-function ShapeKey() {
+/** The node kinds in this graph, each with the fill and icon it wears in the graph. */
+function KindKey({ kinds }: { kinds: LineageKind[] }) {
   return (
     <div className="mt-3 border-t pt-2 text-xs text-muted-foreground">
-      <p className="mb-1 font-medium">Shapes</p>
-      <ul className="space-y-0.5">
-        {SHAPE_KEY.map(({ shape, kinds }) => (
-          <li key={shape} className="flex items-center gap-1.5">
-            <svg viewBox="0 0 12 12" className="size-3 fill-current" aria-hidden>{SHAPE_PATH[shape]}</svg>
-            {kinds.map((k) => KIND_LABEL[k]).join(", ")}</li>))}
+      <p className="mb-1.5 font-medium">Node types</p>
+      <ul className="grid grid-cols-2 gap-x-2 gap-y-1">
+        {kinds.map((k) => (
+          <li key={k} className="flex items-center gap-1.5">
+            <svg viewBox="-4 -4 32 32" className="size-4 shrink-0 rounded-full" style={{ background: KIND_STYLE[k].fill }}
+              fill="none" stroke={KIND_STYLE[k].ink} strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" aria-hidden
+              dangerouslySetInnerHTML={{ __html: KIND_STYLE[k].icon }} />
+            {KIND_LABEL[k]}</li>))}
       </ul>
-      <p className="mt-1">Colour shows the source system.</p>
+      <p className="mt-1.5">The ring round a node is the colour of its source system; a gold halo marks what the
+        reasoning used.</p>
     </div>
   );
 }
