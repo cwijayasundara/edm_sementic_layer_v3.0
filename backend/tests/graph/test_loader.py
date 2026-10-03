@@ -79,7 +79,7 @@ def test_masking_view_exposes_public_name_and_flags_masked_columns():
 
 def test_metric_nodes_carry_the_gateway_contract(graph):
     metrics = {m["id"]: m for m in graph.labelled("Metric")}
-    assert set(metrics) == _sql_ids() | _rest_ids() and len(metrics) == 22
+    assert set(metrics) == _sql_ids() | _rest_ids() and len(metrics) == 25
     m = metrics["manual_matches"]
     assert m["kind"] == "sql" and m["mcp_server"] == "cashrecon-mcp" and m["mcp_tool"] == "run_metric"
     assert m["sensitive_dimensions"] == ["matched_by"] and m["tables"] == ["cashrecon.match_groups"]

@@ -341,6 +341,26 @@ def search_text(props: dict) -> str:
                                  props.get("description")) if x)
 
 
+def _add_joinable(g: Graph, k: Knowledge) -> None:
+    """(:Metric)-[:JOINABLE_ON {key, other_key}]->(:Metric) for metrics of different sources whose dimensions map
+    (ON_COLUMN) to columns of one same_key group: the semantic layer's statement of how the systems connect. One edge
+    per dimension pair, from the lower metric id. The edge has no scopes of its own: retrieval shows it only when both
+    metrics (and both dimensions) pass gate()."""
+    groups: dict[str, set[int]] = {}
+    for n, group in enumerate(k.same_key):
+        for col in group:
+            groups.setdefault(col, set()).add(n)
+    keyed = []
+    for a, typ, b, _ in g.edges:
+        if typ == "ON_COLUMN" and b in groups:
+            d = g.nodes[a]["props"]
+            keyed.append((d["metric"], g.nodes[f"metric:{d['metric']}"]["props"]["source"], d["name"], groups[b]))
+    for ma, sa, da, ga in keyed:
+        for mb, sb, db, gb in keyed:
+            if sa != sb and ma < mb and ga & gb:
+                g.edge(f"metric:{ma}", "JOINABLE_ON", f"metric:{mb}", key=da, other_key=db)
+
+
 def build_graph(embedder: Embedder, exclude: frozenset[str] = frozenset(), knowledge: Knowledge | None = None) -> Graph:
     """Registries + knowledge -> Graph with local uids. `exclude` drops metrics by uid (`metric:<id>`) together with
     their dimensions and the edges that pointed at them (used to test stale cleanup)."""
@@ -350,6 +370,7 @@ def build_graph(embedder: Embedder, exclude: frozenset[str] = frozenset(), knowl
     _add_schema(g, ddl)
     _add_metrics(g, ddl, exclude)
     _add_knowledge(g, k, exclude)
+    _add_joinable(g, k)
     _add_roles(g)
     g.edges = [e for e in g.edges if e[0] not in exclude and e[2] not in exclude]
     _check(g)

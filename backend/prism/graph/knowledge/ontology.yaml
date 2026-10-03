@@ -57,8 +57,12 @@ concept_relations:
 # Hand-authored cross-source join keys: every column in a group holds the same identifier even where the names
 # differ, so the groups cannot be inferred from the DDL.
 same_key:
-  - [column:refmaster.securities.security_id, column:marketmaster.instruments.security_id, column:assetrecon.internal_positions.security_id, column:assetrecon.custodian_positions.security_id, column:assetrecon.recon_exceptions.security_id]
+  - [column:refmaster.securities.security_id, column:marketmaster.instruments.security_id, column:assetrecon.internal_positions.security_id, column:assetrecon.custodian_positions.security_id, column:assetrecon.recon_exceptions.security_id, column:marketmaster.price_suspects.security_id, column:refmaster.corporate_actions.security_id, column:refmaster.exceptions.record_ref]
   - [column:refmaster.securities.isin, column:marketmaster.instruments.isin]
-  - [column:refmaster.legal_entities.entity_id, column:cashrecon.cash_accounts.legal_entity_id, column:cashrecon.breaks.legal_entity_id, column:marketmaster.esg_scores.entity_id, column:refmaster.securities.issuer_entity_id]
+  - [column:refmaster.legal_entities.entity_id, column:cashrecon.cash_accounts.legal_entity_id, column:cashrecon.breaks.legal_entity_id, column:marketmaster.esg_scores.entity_id, column:refmaster.securities.issuer_entity_id, column:assetrecon.portfolios.fund_entity_id, column:refmaster.corporate_actions.issuer_entity_id]
   - [column:feedhub.sources.source_id, column:assetrecon.custodians.feed_source_id, column:cashrecon.cash_accounts.bank_source_id]
+  # custodian and bank sources share the source_id space but never each other's rows: separate groups keep a
+  # custodian from being joined to a bank (funds.custodian_source_id vs open_breaks.bank_source_id)
+  - [column:feedhub.feed_deliveries.source_id, column:assetrecon.custodians.feed_source_id, column:assetrecon.portfolios.custodian_source_id]
+  - [column:feedhub.feed_deliveries.source_id, column:cashrecon.cash_accounts.bank_source_id, column:cashrecon.breaks.bank_source_id]
   - [column:feedhub.feed_deliveries.delivery_id, column:assetrecon.custodian_positions.delivery_id]
