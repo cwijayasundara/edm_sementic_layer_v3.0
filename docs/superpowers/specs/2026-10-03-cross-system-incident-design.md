@@ -29,8 +29,8 @@ teaches the agent a cross-system investigation pattern.
 - Parallel per-source delegation for the chain (hops are sequential; `delegate` is unchanged).
 
 **Success:**
-- `make eval-check` is green, including three references that each `combine` five inputs, one per source.
-- The existing test suite is green; the only existing test edited is the NAV-tolerance test (§2.6).
+- `make eval-check` is green, including three references that each `combine` 5–8 inputs covering all five sources.
+- The existing test suite is green; existing tests are edited only as listed in §2.6.
 - A live `make eval` run answers the PF003 question with a decision trace that touches all five sources.
 
 ## 2. The incident (simulator)
@@ -42,8 +42,8 @@ A missed corporate action, surfaced in every system:
 |---|---|---|---|
 | 1 | FeedHub | Custodian `S*` (PF003's custodian source) — its `corporate_actions` feed delivery for 23 Sep is `failed`; the 24 Sep delivery is `late`. | `source_id` |
 | 2 | RefMaster | A 2-for-1 split on security `X`, effective 24 Sep, stays `pending`; an open DQ exception (`record_ref = X`) and an open change request sit on it. `X.issuer_entity_id = E`. | `security_id`, `issuer_entity_id` |
-| 3 | MarketMaster | Vendor prices for `X` halve from 24 Sep; a `spike` suspect is raised on 24 Sep; the golden price carries the pre-split value forward. | `security_id` |
-| 4 | AssetRecon | Custodian positions in `X` double from 24 Sep (split applied), internal positions do not. Every portfolio holding `X` gets an open exception with cause `corporate_action` on 24 Sep onward; PF003 breaches NAV tolerance (> 5 bps) on 24 and 25 Sep. | `portfolio_id` → `fund_entity_id` |
+| 3 | MarketMaster | Vendor prices for `X` halve from 24 Sep; a `spike` suspect is raised on 24 Sep and accepted, so the golden price takes the post-split value. The price is right; the reference data missed the split. | `security_id` |
+| 4 | AssetRecon | Custodian positions in `X` double from 24 Sep (split applied); internal positions keep the unsplit quantity, so internal market value of `X` halves while the administrator's NAV is unchanged. Every portfolio holding `X` gets exceptions with cause `corporate_action` on 24 and 25 Sep and breaches NAV tolerance (> 5 bps) on those days; PF003 is the anchor (largest weight in `X`). Internal ops correct the quantities by hand on 28 Sep (exceptions closed), but the RefMaster record stays `pending`. | `portfolio_id` → `fund_entity_id` |
 | 5 | CashRecon | On 29 Sep a cash-in-lieu payment for fractional shares lands on PF003's fund cash account; no ledger entry matches; an open break of type `cash_in_lieu` is raised. | `legal_entity_id`, `bank_source_id` |
 
 Entry questions (one golden case each, §5.2):
@@ -79,8 +79,11 @@ So the agent must follow keys rather than take the top row:
 ### 2.5 Determinism and isolation
 - The incident pass runs after all five projectors and before the writer, on the in-memory rows, with its own
   stream `Random(seed + 6)`.
-- It only **appends** rows, or **edits rows it owns** (the incident security's positions, PF003's NAV checks for 24
-  and 25 Sep, the `S*` deliveries for 23 and 24 Sep) without drawing from any other stream.
+- It only **appends** rows, or **edits rows it owns** (the incident security's positions and golden prices from 24 Sep,
+  the NAV checks of every holder of `X` for 24 and 25 Sep, the `S*` deliveries for 23 and 24 Sep) without drawing from
+  any other stream. In the sim, internal NAV is quantity × golden price and administrator NAV is quantity × true
+  price (`project_assetrecon.py` `_positions_day`); the pass rewrites the owned NAV rows to the split arithmetic of
+  §2.1 rather than relying on that formula.
 - No existing projector gains or loses a draw; every existing story (SRC001 late custodian, LE00016 USD breaks,
   Vendor A corp-bond conflicts, stale equities on PF003/PF009 for 28–30 Sep, canaries) is unchanged.
 - Derived aggregates that recount suspects or exceptions (e.g. `dq_stage_metrics`) are recomputed after the pass.
@@ -88,9 +91,14 @@ So the agent must follow keys rather than take the top row:
   `n_cash_accounts`; the default profile is unchanged. Story invariants that need fixed ids (PF001–PF009,
   `SOURCE_LAYOUT`) are guarded as today.
 
-### 2.6 The one existing test that changes
-`tests/sim/test_assetrecon_projection.py` (non-story NAV checks stay within 3 bps) adds the incident portfolios and
-dates to its story exemptions. Every other existing test is unchanged and must pass.
+### 2.6 Existing tests that change
+- `tests/sim/test_assetrecon_projection.py` (non-story NAV checks stay within 3 bps): the holders of `X` on 24 and
+  25 Sep join the story exemptions.
+- Tests that count projected rows against the universe (e.g. `tests/sim/test_refmaster_projection.py` legal entities
+  == `universe.entities`, `tests/sim/test_universe.py` cash accounts == `n_cash_accounts`) count the incident's
+  appended rows separately. The plan greps the suite for every such count before changing code.
+- Every story assertion (SRC001 top late source, LE00016 = 64 aged USD breaks, Vendor A conflict delta, the single
+  credential ticket, stale equities, canaries) is unchanged and must pass.
 
 ## 3. Semantic layer
 
@@ -108,9 +116,14 @@ Rule: every hop of the chain is answerable with a governed metric, so a metrics-
 | CashRecon | `open_breaks`, `open_break_amount` | + dimension and filter `bank_source_id`; `break_type` gains `cash_in_lieu` |
 
 For REST metrics the yaml dimension enum, the metric dimensions and the API `Literal` all change together (the REST
-backend rejects a dimension the endpoint does not return). `security_id`, `fund_entity_id`, `record_ref`,
-`bank_source_id` and `feed_type` are not sensitive. The existing `fine_grain_dimensions` rules are unchanged; the plan
-verifies each hop of the chain is runnable by `bi_analyst` under them and records any hop that is not.
+backend rejects a dimension the endpoint does not return). REST metric dimensions already get `ON_COLUMN` edges to
+the endpoint's backing table (`graph/model.py` `_metric_rows` → `ON_COLUMN`), so §3.2 covers the REST hops.
+
+None of the new dimensions is sensitive. The identifiers (`security_id`, `fund_entity_id`, `record_ref`,
+`bank_source_id`) are `grain: fine`, like the existing ids. The grain policy (`gateway/policy.py`) lets a
+metrics-only caller pin at most one fine dimension per call (group-by and filter together), so some hops, e.g.
+"exceptions in PF003 by security", are refused for `bi_analyst`. That is the governance working, and §5.2 expects a
+partial chain for that persona.
 
 ### 3.2 Join knowledge
 - `same_key` groups gain: `marketmaster.price_suspects.security_id`, `refmaster.corporate_actions.security_id`,
@@ -118,7 +131,8 @@ verifies each hop of the chain is runnable by `bi_analyst` under them and record
   `assetrecon.portfolios.custodian_source_id` (source group).
 - At graph build, a **`(:Metric)-[:JOINABLE_ON {key}]->(:Metric)`** edge is created for every pair of metrics in
   different sources whose dimensions map (`ON_COLUMN`) to columns in the same `same_key` group. `key` is the
-  dimension name on the first metric. Edges carry `allowed_scopes` as the intersection of both metrics' scopes.
+  dimension name on the first metric. The edge has no scopes of its own: it is visible exactly when both endpoint
+  metrics pass `gate()` (an intersection of two single-source scope sets would be empty and hide every edge).
 - This edge is the semantic layer's statement of how the systems connect; the next spec draws it.
 
 ### 3.3 Retrieval
@@ -137,7 +151,8 @@ Step 3's cross-source guidance gains an investigation pattern:
 2. **Follow links:** for each `metric_links` entry leading to a system not yet checked, run the linked metric
    filtered by the key values found so far. Stop when every readable system has been checked or a hop returns
    nothing.
-3. **Join:** one `combine` over the handles (limit 8) into one incident table: the key, then what each system says.
+3. **Join:** one `combine` over the handles (limit 8) into one incident table. The key changes along the chain
+   (portfolio → security → source → entity), so the SQL joins hop by hop rather than on one key.
 4. **Answer:** a causal chain in time order (feed → reference data → price → positions/NAV → cash), naming each
    system and citing numbers from results only.
 
@@ -148,7 +163,6 @@ Step 3's cross-source guidance gains an investigation pattern:
 
 ### 4.3 To verify in planning
 - The supervisor's step/tool-call budget fits a five-system chain (about 9–11 calls).
-- `MAX_RECORD_HANDLES` accepts at least six handles (five sources plus the combine).
 - The M8 decision trace records each hop as its own step touching that hop's metric.
 
 ## 5. Testing
@@ -156,16 +170,21 @@ Step 3's cross-source guidance gains an investigation pattern:
 ### 5.1 Unit and integration
 - `tests/sim/test_incident.py`: every link of §2.1 holds in the generated data; noise holds (§2.4); incident ids are
   chosen per §2.2.
-- No-drift: a checksum of every table, excluding rows the incident pass appended or owns, equals a baseline captured
-  before this change.
+- No-drift: for every table, a checksum over the **original columns of the original rows**, excluding rows the
+  incident pass owns (§2.5) and the derived tables it recomputes (`marketmaster.dq_stage_metrics`), equals a
+  baseline captured from `main` before any code changes.
 - Graph: `JOINABLE_ON` exists for every hop of the chain; `metric_links` per persona: `steward` sees only
   RefMaster↔MarketMaster links, `bi_analyst` sees all and no sensitive dimension.
 - REST: the new summary endpoints group and filter by `security_id`; an unknown dimension is still rejected.
 
 ### 5.2 Golden evals (`golden.yaml`, assertion-graded)
-- Three `head_data` cases, one per entry question. Each reference is one `combine` over five `run_metric` inputs,
-  one per source; story assertions require the incident table to contain `X`, PF003, `S*` and PF003's fund entity.
-- One `bi_analyst` case for the PF003 question (metrics only).
+- Three `head_data` cases, one per entry question. Each reference is one `combine` over 5–8 `run_metric` inputs
+  covering all five sources (the PF003 path alone needs three AssetRecon metrics: NAV breaches, position exceptions
+  and the `funds` bridge). The plan checks that the reference format and `eval-check` support more than two named
+  inputs, and extends them if not. Story assertions require the incident table to contain `X`, PF003, `S*` and
+  PF003's fund entity.
+- One `bi_analyst` case for the PF003 question (live only): the answer covers the hops the grain policy allows and
+  names the refused hop rather than guessing.
 - One `steward` case for the `E` question that must name the systems not checked. Graded by an answer-text
   assertion (each unreadable system's display name appears in the answer); `grade.py` gains this check if it has none.
   Live-suite only (`make eval`), since `eval-check` has no answer text.
