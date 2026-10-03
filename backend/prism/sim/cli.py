@@ -29,6 +29,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--check", action="store_true",
                         help="exit 0 if seeded with the current key, 1 if not seeded, 2 on any error")
     parser.add_argument("--small", action="store_true", help="small dataset for quick demos")
+    parser.add_argument("--scale", type=float, default=1.0, help="multiply securities, entities, portfolios and cash accounts (default 1)")
     args = parser.parse_args(argv)
     if args.check:
         return check()
@@ -41,7 +42,7 @@ def main(argv: list[str] | None = None) -> int:
         print("Already seeded (use --reset to re-seed).")
         return 0
     base = dict(seed=settings.seed, as_of=settings.as_of)
-    cfg = SimConfig.small(**base) if args.small else SimConfig(**base)
+    cfg = SimConfig.small(**base, scale=args.scale) if args.small else SimConfig(**base, scale=args.scale)
     doomed = [settings.dbname(logical) for logical in LOGICAL_DBS]
     print(f"Dropping and recreating databases on {settings.pg_host}:{settings.pg_port}: {', '.join(doomed)} "
           f"(keeping {settings.dbname(APP_DB)})")

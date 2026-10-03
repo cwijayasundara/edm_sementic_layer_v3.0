@@ -69,6 +69,8 @@ LATE_CUSTODIAN_PORTFOLIOS = ("PF001", "PF002", "PF005")
 NAV_PORTFOLIOS = ("PF003", "PF009")
 STALE_JUMP = 1.06
 
+SCALED_FIELDS = ("n_securities", "n_entities", "n_portfolios", "n_cash_accounts")
+
 
 @dataclass(frozen=True)
 class SimConfig:
@@ -83,8 +85,16 @@ class SimConfig:
     vendor_window_days: int = 20
     position_window_days: int = 20
     profile: str = "full"
+    scale: float = 1.0
 
     def __post_init__(self) -> None:
+        if not self.scale > 0:
+            raise ValueError("scale must be > 0")
+        if self.scale != 1.0:   # consumed here: replace() never scales twice; the profile records the factor
+            for name in SCALED_FIELDS:
+                object.__setattr__(self, name, round(getattr(self, name) * self.scale))
+            object.__setattr__(self, "profile", f"{self.profile}x{self.scale:g}")
+            object.__setattr__(self, "scale", 1.0)
         if self.n_portfolios < 9:
             raise ValueError("n_portfolios must be >= 9 (stories use PF001-PF009)")
         if self.n_days < 25:

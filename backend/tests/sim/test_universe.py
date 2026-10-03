@@ -96,3 +96,21 @@ def test_tickers_and_names_are_unique(cfg):
     assert len(set(names)) == len(names)
     isins = [s.isin for s in u.securities]
     assert len(set(isins)) == len(isins) and all(map(is_valid_isin, isins))
+
+
+def test_scale_multiplies_the_universe_counts_once():
+    from dataclasses import replace
+    cfg = SimConfig(scale=2)
+    assert (cfg.n_securities, cfg.n_entities, cfg.n_portfolios, cfg.n_cash_accounts) == (4000, 800, 60, 120)
+    assert cfg.scale == 1.0 and cfg.profile == "fullx2"
+    assert replace(cfg) == cfg                                    # never scaled twice
+    assert SimConfig() == SimConfig(scale=1.0)                    # the default profile is unchanged
+    small = SimConfig.small(scale=1.5)
+    assert small.n_portfolios == 18 and small.profile == "smallx1.5"
+
+
+def test_scale_still_guards_story_prerequisites():
+    with pytest.raises(ValueError, match="n_portfolios"):
+        SimConfig(scale=0.2)                                      # 30 -> 6 portfolios
+    with pytest.raises(ValueError, match="scale"):
+        SimConfig(scale=0)
