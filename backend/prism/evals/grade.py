@@ -6,7 +6,7 @@ that still tells the planted story is a correct answer."""
 import math
 from dataclasses import dataclass
 
-from prism.evals.cases import GoldenCase, Story, Tolerance
+from prism.evals.cases import AnswerCheck, GoldenCase, Story, Tolerance
 from prism.evals.types import ChatResult, Table
 
 
@@ -87,6 +87,14 @@ def story_holds(story: Story, table: Table) -> bool:
     return any(_num(r[col[top.by]]) == best and str(r[col[top.key]]) == str(top.equals) for r in rows)
 
 
+def answer_check(spec: AnswerCheck, text: str | None) -> Check:
+    low = (text or "").casefold()
+    missing = [w for w in spec.all if w.casefold() not in low]
+    some = not spec.any or any(w.casefold() in low for w in spec.any)
+    detail = f"missing {missing}" if missing else ("" if some else f"none of {spec.any}")
+    return Check("answer", not missing and some, detail)
+
+
 def grade_golden(case: GoldenCase, chat: ChatResult, tables: dict[str, Table | None], ref: Table | None) -> list[Check]:
     e = case.expect
     checks = [Check("answered", bool(chat.widgets) and chat.error is None and not chat.timed_out,
@@ -109,6 +117,8 @@ def grade_golden(case: GoldenCase, chat: ChatResult, tables: dict[str, Table | N
     if e.chart_types:
         types = [w["widget"]["type"] for w in chat.widgets]
         checks.append(Check("chart", any(t in e.chart_types for t in types), f"widget types {types}"))
+    if e.answer is not None:
+        checks.append(answer_check(e.answer, chat.summary))
     return checks
 
 

@@ -73,3 +73,22 @@ def test_rows_match_fails_cleanly_when_per_key_counts_differ():
     got = Table(["k", "v"], [["A", 1], ["B", 2], ["B", 3]])
     check = rows_match(ref, got, Tolerance())
     assert not check.ok and "rows per key" in check.detail
+
+
+from prism.evals.cases import AnswerCheck
+from prism.evals.grade import answer_check
+
+
+def test_answer_check_all_and_any_case_insensitive():
+    spec = AnswerCheck.model_validate({"all": ["AssetRecon", "FeedHub"], "any": ["grain", "refused"]})
+    assert answer_check(spec, "Could not check assetrecon or FEEDHUB: the grain was refused.").ok
+    miss = answer_check(spec, "Could not check AssetRecon: refused.")
+    assert not miss.ok and "FeedHub" in miss.detail
+    assert not answer_check(AnswerCheck.model_validate({"any": ["grain"]}), None).ok
+
+
+def test_grade_golden_adds_the_answer_check():
+    c = case(answer={"all": ["PF003"]})
+    chat = ChatResult(widgets=[widget()], summary="PF003 breached on two days.")
+    names = [x.name for x in grade_golden(c, chat, {"r_aaaaaaaaaaaa": REF}, REF)]
+    assert "answer" in names

@@ -180,3 +180,93 @@
         a: {tool: run_metric, args: {metric_id: open_breaks, dimensions: [region]}}
         b: {tool: run_metric, args: {metric_id: auto_match_rate, dimensions: [region]}}
   expect: {metric_id: open_breaks}
+# M9 cross-system incident (spec 2026-10-03): a missed 2-for-1 split on SEC001982 (issuer LE00364), seen in all five
+# systems. Literals are the full profile's (seed 42, as of 2026-09-30); `make reseed` prints them.
+- id: incident_pf003_nav_breach
+  persona: head_data
+  question: Why did PF003 breach its NAV tolerance on 24 September?
+  reference:
+    tool: combine
+    args:
+      sql: >-
+        SELECT n.portfolio_id, e.security_id, c.issuer_entity_id, f.fund_entity_id, f.custodian_source_id,
+        n.value AS nav_breaches, e.value AS position_exceptions, c.value AS pending_corporate_actions,
+        p.value AS price_spikes, l.value AS late_corporate_action_feeds, b.value AS cash_in_lieu_breaks
+        FROM n JOIN f ON f.portfolio_id = n.portfolio_id JOIN e ON e.portfolio_id = n.portfolio_id
+        JOIN c ON c.security_id = e.security_id LEFT JOIN p ON p.security_id = e.security_id
+        LEFT JOIN l ON l.source_id = f.custodian_source_id LEFT JOIN b ON b.legal_entity_id = f.fund_entity_id
+      inputs:
+        n: {tool: run_metric, args: {metric_id: nav_breaches_above_5bps, dimensions: [portfolio_id], filters: {portfolio_id: PF003}}}
+        e: {tool: run_metric, args: {metric_id: position_exceptions, dimensions: [portfolio_id, security_id], filters: {portfolio_id: PF003, cause_code: corporate_action}}}
+        f: {tool: run_metric, args: {metric_id: funds, dimensions: [portfolio_id, fund_entity_id, custodian_source_id], filters: {portfolio_id: PF003}}}
+        c: {tool: run_metric, args: {metric_id: pending_corporate_actions, dimensions: [security_id, issuer_entity_id]}}
+        p: {tool: run_metric, args: {metric_id: price_suspects, dimensions: [security_id], filters: {kind: spike}}}
+        l: {tool: run_metric, args: {metric_id: late_feeds, dimensions: [source_id], filters: {feed_type: corporate_actions}}}
+        b: {tool: run_metric, args: {metric_id: open_breaks, dimensions: [legal_entity_id], filters: {break_type: cash_in_lieu}}}
+  expect:
+    metric_id: nav_breaches_above_5bps
+    story: [{contains: {portfolio_id: PF003, security_id: SEC001982, custodian_source_id: SRC005, fund_entity_id: LE00403}}]
+- id: incident_late_ca_feed_downstream
+  persona: head_data
+  question: What did the late corporate-actions feed from SRC005 on 24 September affect downstream?
+  reference:
+    tool: combine
+    args:
+      sql: >-
+        SELECT f.custodian_source_id, f.portfolio_id, e.security_id, c.issuer_entity_id, f.fund_entity_id,
+        l.value AS late_deliveries, e.value AS position_exceptions, c.value AS pending_corporate_actions,
+        p.value AS price_spikes, b.value AS cash_in_lieu_breaks
+        FROM l JOIN f ON f.custodian_source_id = l.source_id JOIN e ON e.portfolio_id = f.portfolio_id
+        JOIN c ON c.security_id = e.security_id LEFT JOIN p ON p.security_id = e.security_id
+        LEFT JOIN b ON b.legal_entity_id = f.fund_entity_id
+      inputs:
+        l: {tool: run_metric, args: {metric_id: late_feeds, dimensions: [source_id], filters: {source_id: SRC005, feed_type: corporate_actions, business_date: "2026-09-24"}}}
+        f: {tool: run_metric, args: {metric_id: funds, dimensions: [portfolio_id, fund_entity_id, custodian_source_id], filters: {custodian_source_id: SRC005}}}
+        e: {tool: run_metric, args: {metric_id: position_exceptions, dimensions: [portfolio_id, security_id], filters: {cause_code: corporate_action}}}
+        c: {tool: run_metric, args: {metric_id: pending_corporate_actions, dimensions: [security_id, issuer_entity_id]}}
+        p: {tool: run_metric, args: {metric_id: price_suspects, dimensions: [security_id], filters: {kind: spike}}}
+        b: {tool: run_metric, args: {metric_id: open_breaks, dimensions: [legal_entity_id], filters: {break_type: cash_in_lieu}}}
+  expect:
+    metric_id: late_feeds
+    story: [{contains: {custodian_source_id: SRC005, portfolio_id: PF003, security_id: SEC001982, fund_entity_id: LE00403}}]
+- id: incident_issuer_across_systems
+  persona: head_data
+  question: What is going wrong for LE00364 across our systems?
+  reference:
+    tool: combine
+    args:
+      sql: >-
+        SELECT c.issuer_entity_id, c.security_id, e.portfolio_id, f.fund_entity_id, f.custodian_source_id,
+        c.value AS pending_corporate_actions, d.value AS open_dq_exceptions, p.value AS price_spikes,
+        e.value AS position_exceptions, l.value AS late_corporate_action_feeds, b.value AS cash_in_lieu_breaks
+        FROM c LEFT JOIN d ON d.record_ref = c.security_id LEFT JOIN p ON p.security_id = c.security_id
+        JOIN e ON e.security_id = c.security_id JOIN f ON f.portfolio_id = e.portfolio_id
+        LEFT JOIN l ON l.source_id = f.custodian_source_id LEFT JOIN b ON b.legal_entity_id = f.fund_entity_id
+      inputs:
+        c: {tool: run_metric, args: {metric_id: pending_corporate_actions, dimensions: [security_id, issuer_entity_id], filters: {issuer_entity_id: LE00364}}}
+        d: {tool: run_metric, args: {metric_id: open_dq_exceptions, dimensions: [record_ref], filters: {domain: corporate_action}}}
+        p: {tool: run_metric, args: {metric_id: price_suspects, dimensions: [security_id], filters: {kind: spike}}}
+        e: {tool: run_metric, args: {metric_id: position_exceptions, dimensions: [portfolio_id, security_id], filters: {cause_code: corporate_action}}}
+        f: {tool: run_metric, args: {metric_id: funds, dimensions: [portfolio_id, fund_entity_id, custodian_source_id]}}
+        l: {tool: run_metric, args: {metric_id: late_feeds, dimensions: [source_id], filters: {feed_type: corporate_actions}}}
+        b: {tool: run_metric, args: {metric_id: open_breaks, dimensions: [legal_entity_id], filters: {break_type: cash_in_lieu}}}
+  expect:
+    metric_id: pending_corporate_actions
+    story: [{contains: {issuer_entity_id: LE00364, security_id: SEC001982, portfolio_id: PF003, custodian_source_id: SRC005, fund_entity_id: LE00403}}]
+# Partial access: the reference is what the persona can run; the answer must cover the allowed hops and name the rest.
+- id: incident_pf003_nav_breach_bi
+  persona: bi_analyst
+  question: Why did PF003 breach its NAV tolerance on 24 September?
+  reference: {tool: run_metric, args: {metric_id: nav_breaches_above_5bps, dimensions: [portfolio_id]}}
+  expect:
+    metric_id: nav_breaches_above_5bps
+    story: [{contains: {portfolio_id: PF003}}]
+    answer: {all: [PF003], any: [grain, too fine, not available, refused, could not]}
+- id: incident_issuer_steward_partial
+  persona: steward
+  question: What is going wrong for LE00364 across our systems?
+  reference: {tool: run_metric, args: {metric_id: pending_corporate_actions, dimensions: [security_id], filters: {issuer_entity_id: LE00364}}}
+  expect:
+    metric_id: pending_corporate_actions
+    story: [{contains: {security_id: SEC001982}}]
+    answer: {all: [AssetRecon, CashRecon, FeedHub]}

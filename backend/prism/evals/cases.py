@@ -50,11 +50,24 @@ class Story(_M):
         return self
 
 
+class AnswerCheck(_M):
+    """Phrases the written answer must contain (case-insensitive): every `all` phrase and at least one `any` phrase."""
+    all: list[str] = []
+    any: list[str] = []
+
+    @model_validator(mode="after")
+    def _some(self) -> "AnswerCheck":
+        if not (self.all or self.any):
+            raise ValueError("answer needs at least one `all` or `any` phrase")
+        return self
+
+
 class Expect(_M):
     metric_id: str | None = None
     source: str | None = None
     chart_types: list[Literal[WIDGET_TYPES]] | None = None   # type: ignore[valid-type]
     story: list[Story] = []
+    answer: AnswerCheck | None = None
 
     @model_validator(mode="after")
     def _target(self) -> "Expect":

@@ -70,3 +70,26 @@ def test_duplicate_ids_are_refused(tmp_path):
     p.write_text(yaml.safe_dump([case, case]))
     with pytest.raises(ValueError, match="duplicate"):
         load_redteam(p)
+
+
+def test_answer_check_needs_a_phrase():
+    import pytest
+    from prism.evals.cases import AnswerCheck
+    with pytest.raises(ValueError):
+        AnswerCheck.model_validate({})
+
+
+def test_incident_references_cover_all_five_sources():
+    from prism.evals.cases import load_golden
+    from prism.mcp.metrics import DEFAULT_METRICS_DIR, load_metrics
+    from prism.mcp.rest_backend import load_rest_config
+    source = {m.id: m.source for m in load_metrics(DEFAULT_METRICS_DIR).values()}
+    for rest in ("refmaster", "marketmaster"):
+        source |= {metric_id: rest for metric_id in load_rest_config(rest)[1]}
+    cases = {c.id: c for c in load_golden()}
+    for cid in ("incident_pf003_nav_breach", "incident_late_ca_feed_downstream", "incident_issuer_across_systems"):
+        ref = cases[cid].reference
+        inputs = ref["args"]["inputs"]
+        assert ref["tool"] == "combine" and 5 <= len(inputs) <= 7
+        assert {source[i["args"]["metric_id"]] for i in inputs.values()} == {
+            "refmaster", "marketmaster", "cashrecon", "assetrecon", "feedhub"}
