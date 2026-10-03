@@ -4,6 +4,9 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 
 ALL_SOURCES = ("refmaster", "marketmaster", "cashrecon", "assetrecon", "feedhub")
+# Display names, spelled as the UI's header chips (frontend/lib/session.ts SOURCE_NAMES).
+SOURCE_DISPLAY = {"refmaster": "RefMaster", "marketmaster": "MarketMaster", "cashrecon": "CashRecon",
+                  "assetrecon": "AssetRecon", "feedhub": "FeedHub"}
 ALL_ROWS = {"asset_class": ("*",), "region": ("*",), "fund_group": ("*",), "source_type": ("*",)}
 
 

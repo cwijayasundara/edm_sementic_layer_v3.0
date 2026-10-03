@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from prism.config import Settings
 from prism.gateway.audit import valid_caller_id
 from prism.gateway.server import GATEWAY_AUDIENCE, MAX_TOKEN_LIFETIME_S
+from prism.security.personas import ALL_SOURCES
 from prism.security.tokens import TokenError, verify
 
 
@@ -22,6 +23,7 @@ class UserContext:
     metrics_only: bool
     token: str = field(repr=False)
     scope_digest: str = ""   # what the gateway enforces besides roles (scopes, row grants, metrics_only); cache keys use it
+    sources: tuple[str, ...] = ()
 
 
 def verify_user(token: str, settings: Settings, now: float | None = None) -> UserContext:
@@ -35,8 +37,10 @@ def verify_user(token: str, settings: Settings, now: float | None = None) -> Use
             or exp > (time.time() if now is None else now) + MAX_TOKEN_LIFETIME_S):
         raise AuthError("invalid token")
     roles = claims.get("roles")
+    scopes = claims.get("scopes") if isinstance(claims.get("scopes"), list) else []
+    readable = {s.split(".", 1)[0] for s in scopes if isinstance(s, str)}
     enforced = {k: claims.get(k) for k in ("scopes", "rows", "metrics_only")}
     digest = hashlib.sha256(json.dumps(enforced, sort_keys=True, separators=(",", ":"), default=str).encode()).hexdigest()
     return UserContext(sub=claims["sub"], roles=tuple(roles) if isinstance(roles, list) else (),
                        metrics_only=claims.get("metrics_only") is not False, token=token,
-                       scope_digest=digest[:16])
+                       scope_digest=digest[:16], sources=tuple(s for s in ALL_SOURCES if s in readable))

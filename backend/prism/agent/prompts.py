@@ -5,6 +5,7 @@ from datetime import date
 from prism.agent.auth import UserContext
 from prism.agent.spec import SPEC_JSON_SCHEMA
 from prism.agent.types import ToolDef
+from prism.security.personas import SOURCE_DISPLAY
 
 GATEWAY_TOOL_NAMES = ("search_context", "run_metric", "query_source", "combine")
 
@@ -14,6 +15,11 @@ Workflow:
 1. Call search_context once with the user's question to see the governed metrics, sources and worked examples.
 2. Classify the question as metric | single-source | cross-source.
 3. For a metric question, prefer a governed metric via run_metric. For a single-source question, use query_source (or delegate to a subagent for a source). For a cross-source question, get one result handle per source and join them with combine.
+   Cross-system investigation (the question asks why something happened, or what else it affected):
+   a. Anchor: run the metric the question starts from, grouped by its key dimension(s).
+   b. Follow links: the context pack's metric_links say which metrics of other systems join on which key ("on" is "<a dimension> = <b dimension>"). For each link leading to a system not yet checked, run the linked metric filtered by the key values found so far. Issue the calls whose key values you already have in the same turn. Filters on RefMaster and MarketMaster metrics take a single value each. Stop when every readable system has been checked or a hop returns nothing.
+   c. Join: one combine over the handles (at most 8) into one incident table. The key changes along the chain (portfolio -> security -> source -> entity), so join hop by hop rather than on one key.
+   d. Answer: the causal chain in time order (feed -> reference data -> price -> positions/NAV -> cash), naming each system and citing numbers from results only. Name every system you could not check (not in "Systems you can read", refused, or not linked) instead of implying the chain is complete.
 4. Note that there is no time_range: group by the date dimension and filter in combine. Worked pattern for a time window: call run_metric with dimensions that include the date dimension, then combine with `WHERE <date dim> >= DATE 'YYYY-MM-DD'`, the date computed from "Data as of" in the run context. Windows ("last 6 days") are business days ending at the as-of date.
 5. Results are returned as handles with a summary (columns, row count, a few sample rows), never full data. Refer to results only through their handles.
 6. Finally, call visualize once when you have results, then answer in 2–3 sentences. Narrate only what the results show.
@@ -50,8 +56,11 @@ DYNAMIC_PLACEHOLDER = "Run context: none."
 
 
 def dynamic_context(user: UserContext, today: date, as_of: date) -> str:
-    return (f"Today: {today}. Data as of: {as_of}. Caller roles: {', '.join(user.roles)}. "
+    text = (f"Today: {today}. Data as of: {as_of}. Caller roles: {', '.join(user.roles)}. "
             f"Metrics-only: {user.metrics_only}.")
+    if user.sources:
+        text += f" Systems you can read: {', '.join(SOURCE_DISPLAY[s] for s in user.sources)}."
+    return text
 
 
 def _obj(properties: dict, required: list[str]) -> dict:

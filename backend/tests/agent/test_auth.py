@@ -69,3 +69,11 @@ def test_scope_digest_tracks_scopes_rows_and_metrics_only_and_never_the_token():
     other_mode = verify_user(tok("head_data", metrics_only=not claims["metrics_only"]), S)
     assert len({base.scope_digest, other_rows.scope_digest, other_scopes.scope_digest, other_mode.scope_digest}) == 4
     assert base.token not in repr(base)
+
+
+def test_verify_user_lists_readable_sources():
+    # invest_ops_growth: assetrecon, feedhub, refmaster.securities, refmaster.legal_entities
+    assert verify_user(tok("invest_ops_growth"), S).sources == ("refmaster", "assetrecon", "feedhub")
+    assert verify_user(tok("steward"), S).sources == ("refmaster", "marketmaster")
+    assert verify_user(tok("head_data"), S).sources == ("refmaster", "marketmaster", "cashrecon", "assetrecon",
+                                                        "feedhub")                     # pii:read is not a source

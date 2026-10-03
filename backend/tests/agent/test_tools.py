@@ -355,3 +355,26 @@ async def test_delegate_nests_subagent_steps_under_the_delegate_step():
     children = [s for s in state.steps if s["parent"] == delegate["seq"]]
     assert children and all(s["tool"] in ("search_context", "run_metric", "query_source") for s in children)
     assert delegate["ms"] is not None
+
+
+def test_dynamic_context_names_the_readable_systems():
+    user = UserContext(sub="u1", roles=("steward",), metrics_only=False, token="t",
+                       sources=("refmaster", "marketmaster"))
+    assert dynamic_context(user, date(2026, 10, 1), date(2026, 9, 30)).endswith(
+        "Metrics-only: False. Systems you can read: RefMaster, MarketMaster.")
+
+
+def test_supervisor_prompt_teaches_the_cross_system_pattern():
+    for phrase in ("metric_links", "Anchor", "Follow links", "single value", "same turn",
+                   "Name every system you could not check"):
+        assert phrase in SUPERVISOR_SYSTEM, phrase
+
+
+def test_backend_display_names_match_the_ui():
+    import re
+    from pathlib import Path
+
+    from prism.security.personas import ALL_SOURCES, SOURCE_DISPLAY
+    ts = (Path(__file__).resolve().parents[3] / "frontend/lib/session.ts").read_text()
+    ui = dict(re.findall(r"(\w+): \"(\w+)\"", ts.split("SOURCE_NAMES")[1].split("};")[0]))
+    assert SOURCE_DISPLAY == {s: ui[s] for s in ALL_SOURCES}
