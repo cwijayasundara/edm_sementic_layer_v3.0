@@ -41,7 +41,13 @@ endpoints:
     table: exceptions
     result_key: rows
     description: Exception counts grouped by domain, asset class, status or rule.
-    params: {group_by: {type: str_list, enum: [domain, asset_class, status, rule_id]}, domain: {type: str}, asset_class: {type: str}, from: {type: date}, to: {type: date}}
+    params: {group_by: {type: str_list, enum: [domain, asset_class, status, rule_id, record_ref]}, domain: {type: str}, asset_class: {type: str}, record_ref: {type: str}, from: {type: date}, to: {type: date}}
+  - id: pending_corporate_actions_summary
+    path: /api/v1/corporate-actions/pending/summary
+    table: corporate_actions
+    result_key: rows
+    description: Pending corporate actions (effective but not processed) counted by security, issuer, event type or ex-date.
+    params: {group_by: {type: str_list, enum: [security_id, issuer_entity_id, event_type, ex_date]}, security_id: {type: str}, issuer_entity_id: {type: str}, event_type: {type: str}, ex_date: {type: date}, from: {type: date}, to: {type: date}}
   - id: data_dictionary
     path: /api/v1/data-dictionary
     table: data_dictionary
@@ -52,14 +58,24 @@ metrics:
   - id: open_dq_exceptions
     endpoint: exceptions_summary
     value_field: open_count
-    description: Open data-quality rule exceptions (reference-data validation); open = not closed.
+    description: Open data-quality rule exceptions (reference-data validation); open = not closed. record_ref is the security id (or the entity id for the entity domain) the exception is about.
     unit: exceptions
-    dimensions: {domain: domain, asset_class: asset_class, status: status, rule_id: rule_id}
-    filters: {domain: {param: domain, type: str}, asset_class: {param: asset_class, type: str}}
+    dimensions: {domain: domain, asset_class: asset_class, status: status, rule_id: rule_id, record_ref: record_ref}
+    filters: {domain: {param: domain, type: str}, asset_class: {param: asset_class, type: str}, record_ref: {param: record_ref, type: str}}
+    fine_grain_dimensions: [record_ref]  # a security or entity id: at most one per metrics-only call
   - id: dq_exceptions_total
     endpoint: exceptions_summary
     value_field: total
-    description: All data-quality rule exceptions (reference-data validation) in the window, open or closed.
+    description: All data-quality rule exceptions (reference-data validation) in the window, open or closed. record_ref is the security id (or the entity id for the entity domain) the exception is about.
     unit: exceptions
-    dimensions: {domain: domain, asset_class: asset_class, status: status, rule_id: rule_id}
-    filters: {domain: {param: domain, type: str}, asset_class: {param: asset_class, type: str}}
+    dimensions: {domain: domain, asset_class: asset_class, status: status, rule_id: rule_id, record_ref: record_ref}
+    filters: {domain: {param: domain, type: str}, asset_class: {param: asset_class, type: str}, record_ref: {param: record_ref, type: str}}
+    fine_grain_dimensions: [record_ref]  # a security or entity id: at most one per metrics-only call
+  - id: pending_corporate_actions
+    endpoint: pending_corporate_actions_summary
+    value_field: pending
+    description: Corporate actions still pending in the security master although effective (not processed), e.g. a stock split the reference data missed; by security, issuer, action type or effective date.
+    unit: corporate actions
+    dimensions: {security_id: security_id, issuer_entity_id: issuer_entity_id, action_type: event_type, effective_date: ex_date}
+    filters: {security_id: {param: security_id, type: str}, issuer_entity_id: {param: issuer_entity_id, type: str}, action_type: {param: event_type, type: str}, effective_date: {param: ex_date, type: date}}
+    fine_grain_dimensions: [security_id, issuer_entity_id, effective_date]  # identifiers / date: at most one per metrics-only call

@@ -155,3 +155,29 @@ async def test_pagination_is_stable(client, headers_for, path, key):
         ids[name] = [i[key] for i in r.json()["items"]]
     assert not set(ids["a"]) & set(ids["b"])
     assert ids["a"] + ids["b"] == ids["all"]
+
+
+async def test_pending_corporate_actions_summary(client, headers_for):
+    from prism.sim.universe import SimConfig, build_universe
+    inc = build_universe(SimConfig.small()).stories.incident
+    h = headers_for("steward", AUDIENCE)
+    r = await client.get("/api/v1/corporate-actions/pending/summary",
+                         params=[("group_by", "security_id"), ("group_by", "issuer_entity_id")], headers=h)
+    assert r.status_code == 200
+    assert r.json()["rows"] == [{"security_id": inc.security_id, "issuer_entity_id": inc.issuer_entity_id,
+                                 "pending": 1}]
+    by_issuer = await client.get("/api/v1/corporate-actions/pending/summary",
+                                 params={"group_by": "event_type", "issuer_entity_id": inc.issuer_entity_id}, headers=h)
+    assert by_issuer.json()["rows"] == [{"event_type": "split", "pending": 1}]
+    bad = await client.get("/api/v1/corporate-actions/pending/summary", params={"group_by": "ratio"}, headers=h)
+    assert bad.status_code == 422
+
+
+async def test_exceptions_summary_groups_and_filters_by_record_ref(client, headers_for):
+    from prism.sim.universe import SimConfig, build_universe
+    inc = build_universe(SimConfig.small()).stories.incident
+    r = await client.get("/api/v1/exceptions/summary",
+                         params={"group_by": "record_ref", "record_ref": inc.security_id, "domain": "corporate_action"},
+                         headers=headers_for("steward", AUDIENCE))
+    rows = r.json()["rows"]
+    assert len(rows) == 1 and rows[0]["record_ref"] == inc.security_id and rows[0]["open_count"] >= 1

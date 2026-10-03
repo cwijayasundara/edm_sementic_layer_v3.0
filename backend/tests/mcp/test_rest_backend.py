@@ -121,7 +121,7 @@ async def test_query_endpoint_happy_paths(refmaster, marketmaster):
 async def test_describe_lists_endpoints_and_metrics(marketmaster):
     d = await marketmaster.describe(claims_for("steward"))
     assert d.kind == "rest" and {o["name"] for o in d.objects} >= {"prices_conflicts_summary", "golden_copy"}
-    assert [m["id"] for m in d.metrics] == ["price_conflicts"]
+    assert [m["id"] for m in d.metrics] == ["price_conflicts", "price_suspects"]
     nothing = await marketmaster.describe(claims_for("cash_ops_emea"))
     assert nothing.metrics == [] and nothing.objects == []
 
@@ -571,3 +571,24 @@ def test_rest_filter_may_not_alias_a_sensitive_or_fine_dimension():
         rb.EndpointMetric.model_validate({**base, "fine_grain_dimensions": [], "sensitive_dimensions": ["vendor"],
                                           "filters": {"v": {"param": "vendor_id"}}})
     rb.EndpointMetric.model_validate({**base, "filters": {"vendor": {"param": "vendor_id"}}})
+
+
+async def test_incident_hops_through_rest_metrics(refmaster, marketmaster):
+    from prism.sim.universe import SimConfig, build_universe
+    inc = build_universe(SimConfig.small()).stories.incident
+    ca = await rm(refmaster, "steward", "pending_corporate_actions", dimensions=["security_id", "action_type"],
+                  filters={"issuer_entity_id": inc.issuer_entity_id})
+    assert ca.rows == [{"security_id": inc.security_id, "action_type": "split", "value": 1}]
+    dq = await rm(refmaster, "steward", "open_dq_exceptions", dimensions=["record_ref"],
+                  filters={"record_ref": inc.security_id})
+    assert dq.rows and dq.rows[0]["value"] >= 1
+    ps = await rm(marketmaster, "steward", "price_suspects", dimensions=["security_id", "kind"],
+                  filters={"status": "accepted"})
+    assert ps.rows == [{"security_id": inc.security_id, "kind": "spike", "value": 1}]
+    with pytest.raises(SourceError, match="unknown dimension"):
+        await rm(marketmaster, "steward", "price_suspects", dimensions=["deviation_pct"])
+
+
+async def test_rest_filters_take_one_value(refmaster):
+    with pytest.raises(SourceError, match="single value"):
+        await rm(refmaster, "steward", "pending_corporate_actions", filters={"security_id": ["SEC000001", "SEC000002"]})

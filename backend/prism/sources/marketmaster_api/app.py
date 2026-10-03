@@ -95,6 +95,27 @@ async def conflicts_summary(request: Request, claims: Claims,
     return {"group_by": groups, "rows": await fetch(request, DB, claims, query, params)}
 
 
+SuspectGroup = Literal["security_id", "kind", "vendor_id", "price_date", "status", "asset_class"]
+
+
+@router.get("/prices/suspects/summary")
+async def suspects_summary(request: Request, claims: Claims,
+                           group_by: Annotated[list[SuspectGroup], Query()] = ["kind"],
+                           kind: str | None = None, vendor_id: str | None = None, status: str | None = None,
+                           security_id: str | None = None, price_date: date | None = None,
+                           date_from: FromDate = None, date_to: ToDate = None):
+    """Price suspects of every kind (stale, spike, missing, conflict), counted per group."""
+    require_table(claims, DB, "price_suspects")
+    check_range(date_from, date_to)
+    groups = list(dict.fromkeys(group_by))
+    cond, params = where(_suspect_filters(kind, vendor_id, None, status, date_from, date_to)
+                         + [("security_id", "eq", security_id), ("price_date", "eq", price_date)])
+    cols = sql.SQL(", ").join(map(sql.Identifier, groups))
+    query = sql.SQL("SELECT {g}, count(*) AS suspects FROM price_suspects{w} GROUP BY {g} ORDER BY suspects DESC, {g}"
+                    ).format(g=cols, w=cond)
+    return {"group_by": groups, "rows": await fetch(request, DB, claims, query, params)}
+
+
 @router.get("/prices/suspects")
 async def list_suspects(request: Request, claims: Claims, kind: str | None = None, vendor_id: str | None = None,
                         asset_class: str | None = None, status: str | None = None,

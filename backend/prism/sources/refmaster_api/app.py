@@ -16,7 +16,7 @@ SECURITY_COLS = ("security_id", "isin", "cusip", "sedol", "ticker", "name", "ass
                  "issuer_entity_id", "country", "status", "valid_from", "valid_to")
 ENTITY_COLS = ("entity_id", "lei", "name", "country", "region", "sector", "parent_entity_id", "status")
 ACCOUNT_COLS = ("account_id", "product_id", "name", "account_type", "owner_entity_id", "region", "lifecycle_state")
-CA_COLS = ("ca_id", "security_id", "event_type", "ex_date", "pay_date", "ratio", "status")
+CA_COLS = ("ca_id", "security_id", "issuer_entity_id", "event_type", "ex_date", "pay_date", "ratio", "status")
 EXC_COLS = ("exc_id", "rule_id", "domain", "record_ref", "asset_class", "status", "assignee", "opened_at", "closed_at")
 DD_COLS = ("domain", "attribute", "definition", "owner", "source", "lineage")
 
@@ -30,7 +30,8 @@ Limit = Annotated[int, Query(ge=1, le=500)]
 Offset = Annotated[int, Query(ge=0)]
 FromDate = Annotated[date | None, Query(alias="from")]
 ToDate = Annotated[date | None, Query(alias="to")]
-ExceptionGroup = Literal["domain", "asset_class", "status", "rule_id"]
+ExceptionGroup = Literal["domain", "asset_class", "status", "rule_id", "record_ref"]
+PendingGroup = Literal["security_id", "issuer_entity_id", "event_type", "ex_date"]
 
 router = APIRouter()
 
@@ -89,10 +90,29 @@ async def list_corporate_actions(request: Request, claims: Claims, security_id: 
     return page(rows, limit, offset)
 
 
-def _exception_filters(domain, asset_class, status, date_from, date_to):
+def _exception_filters(domain, asset_class, status, date_from, date_to, record_ref=None):
     return [("domain", "eq", domain), ("asset_class", "eq", asset_class), ("status", "eq", status),
-            ("opened_at", "gte", date_from),
+            ("record_ref", "eq", record_ref), ("opened_at", "gte", date_from),
             ("opened_at", "lt", date_to + timedelta(days=1) if date_to else None)]
+
+
+@router.get("/corporate-actions/pending/summary")
+async def pending_corporate_actions_summary(request: Request, claims: Claims,
+                                            group_by: Annotated[list[PendingGroup], Query()] = ["event_type"],
+                                            security_id: str | None = None, issuer_entity_id: str | None = None,
+                                            event_type: str | None = None, ex_date: date | None = None,
+                                            date_from: FromDate = None, date_to: ToDate = None):
+    """Corporate actions still pending in the security master (effective but not processed), counted per group."""
+    require_table(claims, DB, "corporate_actions")
+    check_range(date_from, date_to)
+    groups = list(dict.fromkeys(group_by))
+    cond, params = where([("status", "eq", "pending"), ("security_id", "eq", security_id),
+                          ("issuer_entity_id", "eq", issuer_entity_id), ("event_type", "eq", event_type),
+                          ("ex_date", "eq", ex_date), ("ex_date", "gte", date_from), ("ex_date", "lte", date_to)])
+    cols = sql.SQL(", ").join(map(sql.Identifier, groups))
+    query = sql.SQL("SELECT {g}, count(*) AS pending FROM corporate_actions{w} GROUP BY {g} ORDER BY pending DESC, {g}"
+                    ).format(g=cols, w=cond)
+    return {"group_by": groups, "rows": await fetch(request, DB, claims, query, params)}
 
 
 @router.get("/exceptions")
@@ -111,11 +131,12 @@ async def list_exceptions(request: Request, claims: Claims, domain: str | None =
 async def exceptions_summary(request: Request, claims: Claims,
                              group_by: Annotated[list[ExceptionGroup], Query()] = ["domain"],
                              domain: str | None = None, asset_class: str | None = None,
+                             record_ref: str | None = None,
                              date_from: FromDate = None, date_to: ToDate = None):
     require_table(claims, DB, "exceptions")
     check_range(date_from, date_to)
     groups = list(dict.fromkeys(group_by))
-    cond, params = where(_exception_filters(domain, asset_class, None, date_from, date_to))
+    cond, params = where(_exception_filters(domain, asset_class, None, date_from, date_to, record_ref))
     cols = sql.SQL(", ").join(map(sql.Identifier, groups))
     query = sql.SQL(
         "SELECT {g}, count(*) FILTER (WHERE status <> 'closed') AS open_count, count(*) AS total "

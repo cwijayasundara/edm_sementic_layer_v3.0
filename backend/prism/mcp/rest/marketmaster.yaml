@@ -36,6 +36,12 @@ endpoints:
     result_key: items
     description: Price suspects (stale, spike, missing, conflict).
     params: {kind: {type: str}, vendor_id: {type: str}, asset_class: {type: str}, status: {type: str}, from: {type: date}, to: {type: date}, limit: {type: int, min: 1, max: 500}, offset: {type: int, min: 0}}
+  - id: prices_suspects_summary
+    path: /api/v1/prices/suspects/summary
+    table: price_suspects
+    result_key: rows
+    description: Price suspect counts (stale, spike, missing, conflict) grouped by security, kind, vendor, date or status.
+    params: {group_by: {type: str_list, enum: [security_id, kind, vendor_id, price_date, status, asset_class]}, kind: {type: str}, vendor_id: {type: str}, status: {type: str}, security_id: {type: str}, price_date: {type: date}, from: {type: date}, to: {type: date}}
   - id: golden_copy
     path: /api/v1/golden-copy/{security_id}
     table: golden_prices
@@ -63,3 +69,11 @@ metrics:
     dimensions: {vendor_id: vendor_id, asset_class: asset_class, price_date: price_date, status: status}
     filters: {}
     fine_grain_dimensions: [vendor_id, price_date]  # one vendor quote per security per date: never both
+  - id: price_suspects
+    endpoint: prices_suspects_summary
+    value_field: suspects
+    description: Price suspects of every kind (stale, spike, missing, conflict) by security, kind, vendor, date or status; an accepted spike is a large price move taken into the golden copy (e.g. after a split).
+    unit: suspects
+    dimensions: {security_id: security_id, kind: kind, vendor_id: vendor_id, price_date: price_date, status: status}
+    filters: {security_id: {param: security_id, type: str}, kind: {param: kind, type: str}, vendor_id: {param: vendor_id, type: str}, status: {param: status, type: str}, price_date: {param: price_date, type: date}}
+    fine_grain_dimensions: [security_id, vendor_id, price_date]  # identifiers / date: at most one per metrics-only call

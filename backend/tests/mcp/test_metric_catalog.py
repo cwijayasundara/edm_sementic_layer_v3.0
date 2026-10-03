@@ -85,7 +85,7 @@ def test_metric_ids_are_unique_across_every_source():
     for p in rest_files:
         ids += list(load_rest_config(p.stem)[1])
     assert len(ids) == len(set(ids)), sorted(i for i in set(ids) if ids.count(i) > 1)
-    assert len(ids) == len(EXPECTED) + 3
+    assert len(ids) == len(EXPECTED) + 5
 
 
 def test_overlapping_metrics_say_how_they_relate():

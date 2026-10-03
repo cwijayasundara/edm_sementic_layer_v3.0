@@ -117,3 +117,17 @@ async def test_suspects_pagination_is_deterministic(client, headers_for):
         ids[name] = [i["suspect_id"] for i in r.json()["items"]]
     assert len(ids["all"]) == 40 and not set(ids["a"]) & set(ids["b"])
     assert ids["a"] + ids["b"] == ids["all"]
+
+
+async def test_suspects_summary_groups_and_filters_by_security(client, headers_for):
+    from prism.sim.universe import SimConfig, build_universe
+    inc = build_universe(SimConfig.small()).stories.incident
+    h = headers_for("steward", AUDIENCE)
+    r = await client.get("/api/v1/prices/suspects/summary",
+                         params=[("group_by", "security_id"), ("group_by", "kind"), ("group_by", "status"),
+                                 ("security_id", inc.security_id)], headers=h)
+    rows = r.json()["rows"]
+    assert {"security_id": inc.security_id, "kind": "spike", "status": "accepted", "suspects": 1} in rows
+    assert {row["security_id"] for row in rows} == {inc.security_id}
+    assert (await client.get("/api/v1/prices/suspects/summary", params={"group_by": "deviation_pct"},
+                             headers=h)).status_code == 422
